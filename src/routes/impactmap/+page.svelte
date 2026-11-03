@@ -1,6 +1,7 @@
 <script>
 	import ImpactMap from '$lib/components/impactmap/ImpactMap.svelte';
 	import ImpactMapControls from '$lib/components/impactmap/ImpactMapControls.svelte';
+	import UserInitial from '$lib/components/UserInitial.svelte';
 	import SideNav from '$lib/components/SideNav.svelte';
 	import ControlPanel from '$lib/components/ControlPanel.svelte';
 	import HexDataPanel from '$lib/components/HexDataPanel.svelte';
@@ -43,6 +44,10 @@
 
 	<!-- Hex Data Panel on the right side -->
 	<HexDataPanel />
+
+	<div class="absolute right-4 top-4 z-40">
+		<UserInitial />
+	</div>
 
 	<SideNav items={printNavItems} />
 
