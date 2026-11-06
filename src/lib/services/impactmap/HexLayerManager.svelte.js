@@ -349,10 +349,10 @@ export class HexLayerManager {
 		});
 
 		if (features.length) {
-			// Check if we're in reverse filter mode - if so, reset it
+			// A facility or bridge is selected: clear that selection, then carry on and show the
+			// card for the hex that was clicked (one click, not two).
 			if (impactMapState.reverseFilterMode) {
 				this.resetReverseInfrastructureFilter();
-				return;
 			}
 
 			const feature = features[0];
