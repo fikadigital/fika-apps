@@ -1,4 +1,5 @@
 <script>
+	import { onMount } from 'svelte';
 	import ImpactMap from '$lib/components/impactmap/ImpactMap.svelte';
 	import ImpactMapControls from '$lib/components/impactmap/ImpactMapControls.svelte';
 	import UserInitial from '$lib/components/UserInitial.svelte';
@@ -8,6 +9,11 @@
 	import PrintDialog from '$lib/components/impactmap/PrintDialog.svelte';
 	import { PrintSolid } from 'svelte-awesome-icons';
 	import { printState } from '$lib/utils/state.svelte.js';
+
+	// Warm the hex API in the background while the map loads (see /api/impact-warmup).
+	onMount(() => {
+		fetch('/api/impact-warmup').catch(() => {});
+	});
 
 	const printNavItems = [
 		{

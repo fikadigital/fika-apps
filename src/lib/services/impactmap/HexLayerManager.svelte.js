@@ -1,6 +1,7 @@
 import { impactDataMap } from '$lib/utils/impactmap/impactDataMap';
 import { ColorUtils } from './ColorUtils.svelte.js';
 import { impactMapState } from '$lib/utils/state.svelte';
+import { sessionToken } from '$lib/auth/clerk.svelte.js';
 
 export class HexLayerManager {
 	constructor(map, layerManagers = {}) {
@@ -363,7 +364,11 @@ export class HexLayerManager {
 
 			// Query the database for this hex
 			try {
-				const response = await fetch(`/api/hex-areas?hexID=${encodeURIComponent(hexID)}`);
+				// Signed in: send the Clerk session token (the server forwards it to the API).
+				const token = await sessionToken();
+				const response = await fetch(`/api/hex-areas?hexID=${encodeURIComponent(hexID)}`, {
+					headers: token ? { Authorization: `Bearer ${token}` } : {}
+				});
 
 				if (!response.ok) {
 					const errorData = await response.json();
