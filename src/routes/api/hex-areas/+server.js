@@ -1,9 +1,10 @@
 import { json } from '@sveltejs/kit';
 import pg from 'pg';
 import { env } from '$env/dynamic/private';
+import { impactAuthHeaders } from '$lib/server/impactAuth.js';
 
 /** @type {import('./$types').RequestHandler} */
-export async function GET({ url, platform }) {
+export async function GET({ url, platform, request }) {
 	try {
 		// Get database connection string
 		const connectionString = platform?.env?.DATABASE_URL || env.DATABASE_URL;
@@ -30,6 +31,59 @@ export async function GET({ url, platform }) {
 				},
 				{ status: 400 }
 			);
+		}
+
+		// Prefer the Django API when configured (key stays server-side)
+		const apiBase = platform?.env?.IMPACT_API_URL || env.IMPACT_API_URL;
+		const t0 = performance.now();
+		// Tier 1: a signed-in user's Clerk session token, forwarded as sent by their
+		// browser. Tier 2: this app's own machine token (see impactAuth.js).
+		const userAuth = request.headers.get('authorization');
+		const forwardUser = !!apiBase && /^bearer\s+\S+/i.test(userAuth || '');
+		const authHeaders = !apiBase
+			? null
+			: forwardUser
+				? { Authorization: userAuth }
+				: await impactAuthHeaders(platform).catch(() => null);
+		const authMs = Math.round(performance.now() - t0);
+		if (apiBase && authHeaders) {
+			try {
+				const t1 = performance.now();
+				const hexUrl = `${apiBase.replace(/\/$/, '')}/geostore/api/hexes/${encodeURIComponent(hexID)}/`;
+				let credential = forwardUser ? 'user token' : 'app token';
+				let res = await fetch(hexUrl, { headers: authHeaders, signal: AbortSignal.timeout(30000) });
+				if (res.status === 401 && forwardUser) {
+					// The map is public for now, so a rejected user token (expired, or from
+					// another Clerk app) falls back to the app credential. Remove this once
+					// everyone has to sign in.
+					const appHeaders = await impactAuthHeaders(platform).catch(() => null);
+					if (appHeaders) {
+						console.log('[impact] user token rejected by Django (401); using the app token');
+						credential = 'app token (fallback)';
+						res = await fetch(hexUrl, { headers: appHeaders, signal: AbortSignal.timeout(30000) });
+					}
+				}
+				console.log(
+					`[impact] hex ${hexID}: ${credential}, credential ${authMs} ms, Django ${Math.round(performance.now() - t1)} ms (${res.status}), total ${Math.round(performance.now() - t0)} ms`
+				);
+				if (res.status === 404) {
+					return json(
+						{ error: 'Hex not found', details: `No hex found with ID: ${hexID}` },
+						{ status: 404 }
+					);
+				}
+				if (!res.ok) {
+					console.error('Impact API error:', res.status);
+					return json(
+						{ error: 'API error', details: `Upstream returned ${res.status}` },
+						{ status: 502 }
+					);
+				}
+				return json(await res.json());
+			} catch (apiError) {
+				console.error('Impact API request failed:', apiError);
+				return json({ error: 'API request failed', details: apiError.message }, { status: 502 });
+			}
 		}
 
 		try {

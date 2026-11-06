@@ -1,9 +1,10 @@
 import { json } from '@sveltejs/kit';
 import pg from 'pg';
 import { env } from '$env/dynamic/private';
+import { impactFetch, upstreamError } from '$lib/server/impactApi.js';
 
 /** @type {import('./$types').RequestHandler} */
-export async function GET({ url, platform }) {
+export async function GET({ url, platform, request }) {
 	try {
 		// Get database connection string
 		const connectionString = platform?.env?.DATABASE_URL || env.DATABASE_URL;
@@ -32,6 +33,29 @@ export async function GET({ url, platform }) {
 				},
 				{ status: 400 }
 			);
+		}
+
+		const pathQuery = new URLSearchParams();
+		if (h3Index) pathQuery.set('h3_index', h3Index);
+		if (destinationIndex) pathQuery.set('destination_index', destinationIndex);
+		// Prefer the Django API when configured (the token stays server-side)
+		let upstream = null;
+		try {
+			upstream = await impactFetch(`/geostore/api/paths/?${pathQuery}`, {
+				platform,
+				request,
+				label: `paths ${h3Index ? 'hex ' + h3Index : 'destination ' + destinationIndex}`
+			});
+		} catch (apiError) {
+			console.error('Impact API request failed:', apiError);
+			return json({ error: 'API request failed', details: apiError.message }, { status: 502 });
+		}
+		if (upstream) {
+			if (upstream.status === 400) {
+				return json(await upstream.json(), { status: 400 });
+			}
+			if (!upstream.ok) return upstreamError(upstream, json);
+			return json(await upstream.json());
 		}
 
 		try {
