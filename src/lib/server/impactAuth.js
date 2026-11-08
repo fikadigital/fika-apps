@@ -39,9 +39,20 @@ async function machineToken(machineSecret) {
 	return inflight;
 }
 
+/** This app's machine secret. CLERK_PIPELINE_MACHINE_SECRET is the name the shared .env
+ * uses for the same value. */
+function machineSecretOf(platform) {
+	return (
+		platform?.env?.IMPACT_M2M_SECRET ||
+		env.IMPACT_M2M_SECRET ||
+		platform?.env?.CLERK_PIPELINE_MACHINE_SECRET ||
+		env.CLERK_PIPELINE_MACHINE_SECRET
+	);
+}
+
 /** Headers to send to the impact API, or null when no credential is configured. */
 export async function impactAuthHeaders(platform) {
-	const machineSecret = platform?.env?.IMPACT_M2M_SECRET || env.IMPACT_M2M_SECRET;
+	const machineSecret = machineSecretOf(platform);
 	if (machineSecret) {
 		return { Authorization: `Bearer ${await machineToken(machineSecret)}` };
 	}
@@ -52,9 +63,10 @@ export async function impactAuthHeaders(platform) {
 /** Fetch the first machine token now, so the first real request does not wait for
  * Clerk. Safe to call without a machine secret, and never throws. */
 export async function warmImpactAuth() {
-	if (!env.IMPACT_M2M_SECRET) return;
+	const machineSecret = machineSecretOf();
+	if (!machineSecret) return;
 	try {
-		await machineToken(env.IMPACT_M2M_SECRET);
+		await machineToken(machineSecret);
 	} catch (e) {
 		console.warn('Impact API token warm-up failed; it will be retried on the first request');
 	}
