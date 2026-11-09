@@ -35,7 +35,7 @@
 		<!-- Logo Section -->
 		<div class="flex h-20 items-center justify-center border-b border-gray-700/30">
 			<a
-				href="https://bridgestoprosperity.org"
+				href="https://fika.org"
 				target="_blank"
 				class="flex items-center justify-center">
 				<img src={b2pLogo} alt="B2P Logo" class="h-10 w-10 transition-transform hover:scale-110" />
