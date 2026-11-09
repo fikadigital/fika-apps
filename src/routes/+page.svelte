@@ -177,7 +177,7 @@
 			title: "Côte d'Ivoire Bridge Impact Assessment",
 			description:
 				"Analysis done to determine where bridges are needed to support new schools built in Côte d'Ivoire",
-			href: 'https://bridgestoprosperity.github.io/civ-map/home/',
+			href: 'https://fikadigital.github.io/civ-map/home/',
 			learn: ''
 		},
 		{
