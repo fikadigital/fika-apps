@@ -27,6 +27,13 @@ const saiMapState = $state({
 
 const hexMapState = $state({
 	selectedViz: 'population',
+	// Which kind of destination the travel-time views refer to (ignored for population).
+	destination: 'all_health',
+	// What the last load showed: how many hexes, whether the API cut the list short, or why
+	// nothing was loaded (e.g. zoomed out too far).
+	hexCount: 0,
+	truncated: false,
+	notice: '',
 	selectedPalette: 'magma',
 	reversePalette: true,
 	satelliteImagery: false,

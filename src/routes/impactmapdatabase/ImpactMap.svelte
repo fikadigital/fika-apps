@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import mapboxgl from 'mapbox-gl';
+	import { authFetch } from '$lib/auth/clerk.svelte.js';
 	import { impactMapDatabaseState } from '$lib/utils/state.svelte';
 	import { palettes } from '$lib/utils/colorPalettes';
 	import { vizOptions } from '$lib/utils/hexMapProperties';
@@ -11,108 +12,110 @@
 	let hexData = [];
 	let mapLoaded = false;
 
-	// Function to load data from PostgreSQL
+	// What is loaded is what is in view: the API serves at most 20,000 of either, and the
+	// hexagons are small, so they only load once the view is close enough.
+	const BRIDGE_LIMIT = 20000;
+	const HEX_LIMIT = 20000;
+	const MIN_HEX_ZOOM = 11;
+	let loadTimer;
+	let firstLoad = true;
+	let bridgeRequest = 0;
+	let hexRequest = 0;
+
+	function currentBbox() {
+		const b = map.getBounds();
+		const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+		return [
+			clamp(b.getWest(), -180, 179.999),
+			clamp(b.getSouth(), -90, 89.999),
+			clamp(b.getEast(), -179.999, 180),
+			clamp(b.getNorth(), -89.999, 90)
+		]
+			.map((v) => v.toFixed(5))
+			.join(',');
+	}
+
+	// Load the bridges in view from the impact API
 	async function loadPostgresData() {
+		const mine = ++bridgeRequest;
 		try {
-			impactMapDatabaseState.loadingData = true;
+			// Only the first load covers the map with the spinner; later ones are quiet
+			if (firstLoad) impactMapDatabaseState.loadingData = true;
 			impactMapDatabaseState.error = null;
 
-			// Query the database for bridges
-			const response = await fetch('/api/bridges?limit=120000');
-
+			const response = await authFetch(`/api/bridges?bbox=${currentBbox()}&limit=${BRIDGE_LIMIT}`);
 			if (!response.ok) {
-				throw new Error('Failed to fetch bridge data');
+				const detail = await response.json().catch(() => ({}));
+				throw new Error(detail.error || `HTTP ${response.status}`);
 			}
+			const collection = await response.json();
+			if (mine !== bridgeRequest) return; // the view moved on
 
-			const data = await response.json();
-
-			// Check if we got an error response
-			if (data.error) {
-				throw new Error(`Database error: ${data.error}`);
-			}
-
-			if (data.length === 0) {
-				impactMapDatabaseState.error = 'No bridges found in the database';
-				return;
-			}
-
-			// Use the database data
-			postgresData = data;
-			impactMapDatabaseState.dataCount = data.length;
-
-			// Enable clustering for large datasets
+			// Shape each bridge the way the rest of this page expects
+			postgresData = collection.features.map((f) => ({
+				id: f.id,
+				bridge_index: f.properties.bridge_index,
+				bridge_type: f.properties.type,
+				name: `Bridge ${f.properties.bridge_index}`,
+				geometry: f.geometry,
+				longitude: f.geometry.coordinates[0],
+				latitude: f.geometry.coordinates[1]
+			}));
+			impactMapDatabaseState.dataCount = postgresData.length;
 			impactMapDatabaseState.enableClustering = true;
 
-			// If map is loaded, update the data layer
 			if (map && mapLoaded) {
 				updateMapData();
 			}
 		} catch (error) {
-			impactMapDatabaseState.error = `Error loading data: ${error.message}`;
+			if (mine === bridgeRequest) {
+				impactMapDatabaseState.error = `Error loading bridges: ${error.message}`;
+			}
 		} finally {
-			impactMapDatabaseState.loadingData = false;
+			if (mine === bridgeRequest) impactMapDatabaseState.loadingData = false;
 		}
 	}
 
-	// Function to load hex data from the database
+	// Load the hexagons in view from the impact API (close-up views only)
 	async function loadHexData() {
+		if (!map || !mapLoaded) return;
+		const mine = ++hexRequest;
+		if (!impactMapDatabaseState.showHexLayer) return;
+		if (map.getZoom() < MIN_HEX_ZOOM) {
+			hexData = [];
+			if (map.getSource('hex-data')) {
+				map.getSource('hex-data').setData({ type: 'FeatureCollection', features: [] });
+			}
+			return;
+		}
 		try {
-			// Set loading state
-			impactMapDatabaseState.loadingData = true;
-
-			console.log('Loading hex data from API...');
-
-			// Query the database for hex data
-			const response = await fetch(
-				`/api/hexdata?column=${impactMapDatabaseState.hexDataViz}&limit=1000000`
+			const column = impactMapDatabaseState.hexDataViz || 'population';
+			const response = await authFetch(
+				`/api/hexdata?column=${encodeURIComponent(column)}&bbox=${currentBbox()}&limit=${HEX_LIMIT}`
 			);
-
 			if (!response.ok) {
-				throw new Error(`Failed to fetch hex data: ${response.status} ${response.statusText}`);
+				const detail = await response.json().catch(() => ({}));
+				throw new Error(detail.error || `HTTP ${response.status}`);
 			}
-
-			const data = await response.json();
-			console.log('Received data from API, length:', data.length);
-
-			// Check if we received data with geometry
-			if (!data || data.length === 0) {
-				throw new Error('No hex data returned from API');
-			}
-
-			// Debug the first item to see what we have
-			console.log('Sample hex data item:', data[0]);
-
-			// Check for geojson field
-			if (!data.some((hex) => hex.geojson)) {
-				console.warn('Hex data missing GeoJSON geometry, using sample shapes instead');
-
-				// Create a modified dataset with generated shapes based on centroids
-				hexData = data.map((hex) => ({
-					...hex,
-					// Add generated polygon coordinates based on centroids
-					generatedShape: true
-				}));
-			} else {
-				// Use the real data with geometry
-				hexData = data;
-			}
-			console.log(`Processed ${hexData.length} hex items`);
-
-			// If map is loaded, update the hex layer
-			if (map && mapLoaded) {
-				console.log('Updating hex layer...');
-				updateHexLayer();
-			} else {
-				console.log('Map not yet loaded, will update layer later');
-			}
+			const result = await response.json();
+			if (mine !== hexRequest) return;
+			hexData = result.hexes.map((hex) => ({ ...hex, column }));
+			updateHexLayer();
 		} catch (error) {
+			if (mine !== hexRequest) return;
 			console.error(`Error loading hex data: ${error.message}`);
 			impactMapDatabaseState.error = `Error loading hex data: ${error.message}`;
-			// Turn off hex layer since we couldn't load data
-			impactMapDatabaseState.showHexLayer = false;
-		} finally {
-			impactMapDatabaseState.loadingData = false;
 		}
+	}
+
+	// Reload both once the map has stopped moving
+	function loadSoon() {
+		clearTimeout(loadTimer);
+		loadTimer = setTimeout(() => {
+			firstLoad = false;
+			loadPostgresData();
+			loadHexData();
+		}, 400);
 	}
 
 	// Helper function to parse PostGIS binary format
@@ -189,82 +192,15 @@
 		};
 	}
 
-	// Function to create GeoJSON for hex data - requires proper geojson data from database
+	// The hexagons from the API are already real outlines with one value each
 	function hexDataToGeoJSON(data) {
 		return {
 			type: 'FeatureCollection',
-			features: data
-				.map((hex) => {
-					try {
-						// Extract basic properties
-						const properties = {
-							id: hex.id || `hex-${Math.random().toString(36).substring(2, 10)}`
-						};
-
-						// Add any other available properties
-						if (hex.population !== undefined) {
-							properties.population = hex.population;
-						}
-
-						if (hex.travel_time !== undefined) {
-							properties.travel_time = hex.travel_time;
-						}
-
-						// If we have real GeoJSON from the database
-						if (hex.geojson) {
-							try {
-								// Try to parse the GeoJSON
-								const geometry = JSON.parse(hex.geojson);
-
-								return {
-									type: 'Feature',
-									properties: properties,
-									geometry: geometry
-								};
-							} catch (e) {
-								console.warn('Failed to parse GeoJSON:', e);
-							}
-						}
-
-						// If we have a generated shape flag or need to fall back
-						if (hex.generatedShape || !hex.geojson) {
-							if (hex.longitude && hex.latitude) {
-								// Create a simple hexagon shape around the center
-								const size = 0.015;
-								const center = [parseFloat(hex.longitude), parseFloat(hex.latitude)];
-
-								// Create a regular hexagon
-								const coordinates = [];
-								for (let i = 0; i < 6; i++) {
-									const angle = (Math.PI / 3) * i;
-									// Adjust longitude more to account for the earth's curvature
-									const x = center[0] + size * 1.5 * Math.cos(angle);
-									const y = center[1] + size * Math.sin(angle);
-									coordinates.push([x, y]);
-								}
-
-								// Close the polygon by repeating the first point
-								coordinates.push([...coordinates[0]]);
-
-								return {
-									type: 'Feature',
-									properties: properties,
-									geometry: {
-										type: 'Polygon',
-										coordinates: [coordinates]
-									}
-								};
-							}
-						}
-
-						// Skip this item if we couldn't create a valid feature
-						return null;
-					} catch (e) {
-						console.error('Error creating GeoJSON for hex:', e);
-						return null;
-					}
-				})
-				.filter(Boolean) // Remove any features that couldn't be created
+			features: data.map((hex) => ({
+				type: 'Feature',
+				properties: { id: hex.id, [hex.column]: hex.value },
+				geometry: hex.geometry
+			}))
 		};
 	}
 
@@ -354,24 +290,8 @@
 	function updateMapData() {
 		if (!map || !mapLoaded || postgresData.length === 0) return;
 
-		// Filter data if year filter is active
-		let filteredData = postgresData;
-		if (impactMapDatabaseState.filterByYear) {
-			filteredData = postgresData.filter(
-				(item) =>
-					item.year_completed >= impactMapDatabaseState.yearRange[0] &&
-					item.year_completed <= impactMapDatabaseState.yearRange[1]
-			);
-		}
-
-		// Filter by bridge type if not "all bridges"
-		if (impactMapDatabaseState.selectedLayer !== 'bridges') {
-			filteredData = filteredData.filter((item) =>
-				(item.bridge_type || '')
-					.toLowerCase()
-					.includes(impactMapDatabaseState.selectedLayer.toLowerCase())
-			);
-		}
+		// The bridges have no year or subtype to filter on: every one is a predicted bridge
+		const filteredData = postgresData;
 
 		// Convert to GeoJSON
 		const geojsonData = dataToGeoJSON(filteredData);
@@ -692,6 +612,7 @@
 	});
 
 	onDestroy(() => {
+		clearTimeout(loadTimer);
 		if (map) {
 			map.remove();
 		}
