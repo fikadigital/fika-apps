@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { PUBLIC_CLERK_PUBLISHABLE_KEY } from '$env/static/public';
+import { PUBLIC_FIKA_CLERK_PUBLISHABLE_KEY } from '$env/static/public';
 
 // Reads the Clerk session shared with the Fika Digital platform (same Clerk instance).
 export const clerkState = $state({ loaded: false, user: null });
@@ -9,7 +9,7 @@ let clerkInstance = null;
 export async function initClerk() {
 	if (!browser || clerkState.loaded) return;
 	const { Clerk } = await import('@clerk/clerk-js');
-	const clerk = new Clerk(PUBLIC_CLERK_PUBLISHABLE_KEY);
+	const clerk = new Clerk(PUBLIC_FIKA_CLERK_PUBLISHABLE_KEY);
 	await clerk.load();
 	clerkInstance = clerk;
 	const sync = () => (clerkState.user = clerk.user ?? null);
