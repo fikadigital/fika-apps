@@ -96,7 +96,7 @@
 			title: 'Fika Impact Map',
 			description:
 				'Prototype of a map application allowing user to visualize impact of trail bridges on communities across seven countries in Africa',
-			href: 'https://apps.fikamap.com/impactmap',
+			href: '/impactmap',
 			learn: 'https://public-b2p-geodata.s3.us-east-1.amazonaws.com/research/AGU_2025_poster.pdf'
 		},
 		{
