@@ -6,20 +6,6 @@ import { impactAuthHeaders } from '$lib/server/impactAuth.js';
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url, platform, request }) {
 	try {
-		// Get database connection string
-		const connectionString = platform?.env?.DATABASE_URL || env.DATABASE_URL;
-
-		// Require a database connection
-		if (!connectionString) {
-			return json(
-				{
-					error: 'Database connection missing',
-					details: 'No connection string provided'
-				},
-				{ status: 500 }
-			);
-		}
-
 		// Parse query parameters
 		const hexID = url.searchParams.get('hexID');
 
@@ -84,6 +70,18 @@ export async function GET({ url, platform, request }) {
 				console.error('Impact API request failed:', apiError);
 				return json({ error: 'API request failed', details: apiError.message }, { status: 502 });
 			}
+		}
+
+		// Fallback: query Postgres directly when the impact API is not configured
+		const connectionString = platform?.env?.DATABASE_URL || env.DATABASE_URL;
+		if (!connectionString) {
+			return json(
+				{
+					error: 'Not configured',
+					details: 'Neither IMPACT_API_URL (with a credential) nor DATABASE_URL is set'
+				},
+				{ status: 503 }
+			);
 		}
 
 		try {
