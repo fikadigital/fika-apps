@@ -18,11 +18,12 @@ const waternetMapState = $state({
 });
 
 const saiMapState = $state({
-	selectedViz: 'travel_time_no_sites_major_roads',
-	selectedPalette: 'inferno',
-	reversePalette: true,
+	selectedViz: 'travel_time_no_sites_all_education',
+	selectedPalette: 'ylorrd',
+	reversePalette: false,
 	satelliteImagery: false,
-	clickedData: {}
+	clickedData: {},
+	tourActive: false
 });
 
 const hexMapState = $state({
@@ -96,24 +97,66 @@ const zambiaMapState = $state({
 	walkthroughActive: false
 });
 
-const printState = $state({
-	open: false,
-	tab: 'layout', // 'layout' | 'map-only'
-	title: '',
-	template: 'a4-landscape', // key in pageTemplates
-	format: 'pdf', // 'pdf' | 'png' | 'jpg'
-	width: 1100, // px, used by the map-only tab
-	height: 800,
-	dpi: 300, // 96 | 150 | 300
-	setScale: false,
-	includeAttribution: true,
-	includeLegend: true,
-	includeSelectedHex: true
+const vizLabState = $state({
+	mapStyleUrl: 'mapbox://styles/bridgestoprosperity/cm4kippxv01k101slb7hs8mvr',
+	appliedStyleUrl: 'mapbox://styles/bridgestoprosperity/cm4kippxv01k101slb7hs8mvr',
+	styleError: '',
+	satellite: { visible: false, blackAndWhite: false },
+	vector: {
+		visible: true,
+		url: 'https://data.source.coop/fika/waternet/pmtiles/waterway_model_outputs_20m_vector.pmtiles',
+		sourceLayer: 'waterways',
+		appliedUrl: '',
+		appliedSourceLayer: '',
+		loadNonce: 0,
+		error: '',
+		properties: [], // [{ name, type: 'number' | 'string', min, max, values }]
+		property: 'stream_order',
+		mode: 'gradient', // 'gradient' | 'categorical' | 'solid'
+		paletteName: 'Custom',
+		stops: [
+			{ value: 1, color: 'rgba(147, 236, 221, 1)' },
+			{ value: 4, color: 'rgba(102, 169, 218, 1)' },
+			{ value: 8, color: 'rgba(106, 17, 177, 1)' },
+			{ value: 12, color: 'rgba(159, 35, 126, 1)' }
+		],
+		categories: [], // [{ value, color }]
+		solidColor: 'rgba(0, 145, 73, 1)',
+		opacity: 1,
+		widthMode: 'property', // 'constant' | 'property'
+		constantWidth: 1.5,
+		widthProperty: 'stream_order',
+		widthMin: 0.5,
+		widthMax: 8,
+		filterEnabled: true,
+		filterProperty: 'stream_order',
+		filterMin: 1,
+		hoverValue: ''
+	},
+	raster: {
+		visible: true,
+		url: 'https://public-b2p-geodata.s3.amazonaws.com/waternet-raster-tiles/{z}/{x}/{y}.png',
+		appliedUrl: '',
+		loadNonce: 0,
+		tileSize: 256,
+		maxZoom: 10,
+		minValue: 0,
+		maxValue: 256,
+		paletteName: 'inferno',
+		stops: [
+			{ value: 38, color: 'rgba(0, 0, 5, 0)' },
+			{ value: 64, color: 'rgba(87, 16, 110, 1)' },
+			{ value: 128, color: 'rgba(188, 55, 84, 1)' },
+			{ value: 192, color: 'rgba(249, 142, 9, 1)' },
+			{ value: 217, color: 'rgba(252, 255, 164, 1)' }
+		],
+		opacity: 1
+	}
 });
 
 export {
-	printState,
 	generalState,
+	vizLabState,
 	waternetMapState,
 	saiMapState,
 	hexMapState,

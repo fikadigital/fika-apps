@@ -8,7 +8,56 @@
 
 	let map;
 	let mapContainer;
+	let popup;
+
+	export function getMap() {
+		return map;
+	}
 	const defaultPalette = ['#ffffb2', '#fed976', '#feb24c', '#fd8d3c', '#f03b20', '#bd0026'];
+
+	const destinationLabels = {
+		travel_time_no_sites_all_education: 'Education',
+		travel_time_no_sites_all_health: 'Healthcare',
+		travel_time_no_sites_semi_dense_urban: 'Market',
+		travel_time_no_sites_major_roads: 'Nearest Road'
+	};
+
+	function formatMinutes(val) {
+		if (val == null || val === '' || isNaN(Number(val))) return 'No data';
+		const n = Math.round(Number(val));
+		if (n === 0) return 'No data';
+		if (n >= 60) {
+			const h = Math.floor(n / 60);
+			const m = n % 60;
+			return m > 0 ? `${h}h ${m}min` : `${h}h`;
+		}
+		return `${n} min`;
+	}
+
+	function showPopup(e) {
+		const properties = e.features[0].properties;
+		const viz = saiMapState.selectedViz;
+		const label = destinationLabels[viz] ?? viz;
+		const walkingTime = formatMinutes(properties[viz]);
+
+		const pop = properties['population'];
+		const popFormatted = (pop != null && !isNaN(Number(pop)))
+			? Math.round(Number(pop)).toLocaleString()
+			: null;
+
+		popup
+			.setLngLat(e.lngLat)
+			.setHTML(
+				`<div class="sas-popup">
+					<p class="sas-popup-label">Walking time to ${label}</p>
+					<p class="sas-popup-value">${walkingTime}</p>
+					${popFormatted ? `<p class="sas-popup-pop">Population: ${popFormatted}</p>` : ''}
+				</div>`
+			)
+			.addTo(map);
+
+		saiMapState.clickedData = { [viz]: properties[viz], ...properties };
+	}
 
 	// Create derived values for the visualization
 	let currentVizProps = $derived.by(() => {
@@ -33,9 +82,34 @@
 		return saiMapState.reversePalette ? palette.slice().reverse() : palette;
 	});
 
+	// 4-color rdylgn step scale: green (fast) → yellow → orange → red (slow)
+	// Colors are rdylgn reversed: [dark-red, orange, yellow, green]
+	const SAS_COLORS = ['#1a9641', '#a6d96a', '#fdae61', '#d7191c'];
+
+	const SAS_BINS = {
+		travel_time_no_sites_all_education:    [30, 45, 60],
+		travel_time_no_sites_all_health:       [45, 90, 135],
+		travel_time_no_sites_semi_dense_urban: [60, 120, 180],
+		travel_time_no_sites_major_roads:      [60, 120, 180]
+	};
+
+	function sasColorExpression(viz) {
+		const bins = SAS_BINS[viz];
+		if (!bins) return null;
+		const val = ['coalesce', ['to-number', ['get', viz]], 0];
+		return [
+			'step', val,
+			SAS_COLORS[0],
+			bins[0], SAS_COLORS[1],
+			bins[1], SAS_COLORS[2],
+			bins[2], SAS_COLORS[3]
+		];
+	}
+
 	// Demographics and time delta categories should exclude 0 values from the layer
 	function shouldExcludeZeros(viz) {
 		return (
+			viz.startsWith('travel_time') ||
 			viz.startsWith('time_delta') ||
 			['births', 'pregnancies', 'underweight', 'rwi',
 			 'female_educational_attainment_mean', 'male_educational_attainment_mean'].includes(viz)
@@ -48,10 +122,6 @@
 		}
 		return ['has', viz];
 	}
-
-	$effect(() => {
-		console.log(currentPalette);
-	});
 
 	async function initializeLayers() {
 		if (!map) return;
@@ -95,32 +165,25 @@
 				bounds: hex8Bounds
 			});
 
+			const initialColorExpr = sasColorExpression(saiMapState.selectedViz) ?? [
+				'interpolate', ['linear'],
+				['coalesce', ['to-number', ['get', saiMapState.selectedViz]], 0],
+				currentVizProps['stop0'], currentPalette[0],
+				currentVizProps['stop1'], currentPalette[1],
+				currentVizProps['stop2'], currentPalette[2],
+				currentVizProps['stop3'], currentPalette[3],
+				currentVizProps['stop4'], currentPalette[4]
+			];
+
 			// Add hex6 fill layer with initial styling (for zoom 0-6)
 			map.addLayer({
 				id: 'sai-fill-hex6',
 				type: 'fill',
 				source: 'sai-hex6',
 				'source-layer': 'hex6-impact-data',
-				maxzoom: 7.5, // Only visible up to zoom level 6
+				maxzoom: 7.5,
 				filter: fillFilter(saiMapState.selectedViz),
-				paint: {
-					'fill-color': [
-						'interpolate',
-						['linear'],
-						['coalesce', ['to-number', ['get', saiMapState.selectedViz]], 0],
-						currentVizProps['stop0'],
-						currentPalette[0],
-						currentVizProps['stop1'],
-						currentPalette[1],
-						currentVizProps['stop2'],
-						currentPalette[2],
-						currentVizProps['stop3'],
-						currentPalette[3],
-						currentVizProps['stop4'],
-						currentPalette[4]
-					],
-					'fill-opacity': 0.7
-				}
+				paint: { 'fill-color': initialColorExpr, 'fill-opacity': 0.7 }
 			});
 
 			// Add hex8 fill layer (for zoom 7-22)
@@ -129,26 +192,9 @@
 				type: 'fill',
 				source: 'sai-hex8',
 				'source-layer': 'hex8-impact-data',
-				minzoom: 7.5, // Only visible from zoom level 7
+				minzoom: 7.5,
 				filter: fillFilter(saiMapState.selectedViz),
-				paint: {
-					'fill-color': [
-						'interpolate',
-						['linear'],
-						['coalesce', ['to-number', ['get', saiMapState.selectedViz]], 0],
-						currentVizProps['stop0'],
-						currentPalette[0],
-						currentVizProps['stop1'],
-						currentPalette[1],
-						currentVizProps['stop2'],
-						currentPalette[2],
-						currentVizProps['stop3'],
-						currentPalette[3],
-						currentVizProps['stop4'],
-						currentPalette[4]
-					],
-					'fill-opacity': 0.7
-				}
+				paint: { 'fill-color': initialColorExpr, 'fill-opacity': 0.7 }
 			});
 
 			// Add line layer for zero values (hex6)
@@ -192,32 +238,20 @@
 
 			// Add click interaction for hex6
 			map.on('click', 'sai-fill-hex6', (e) => {
-				if (e.features.length > 0) {
-					const properties = e.features[0].properties;
-					console.log('Selected hex6 feature:', {
-						[saiMapState.selectedViz]: properties[saiMapState.selectedViz],
-						...properties
-					});
-					saiMapState.clickedData = {
-						[saiMapState.selectedViz]: properties[saiMapState.selectedViz],
-						...properties
-					};
-				}
+				if (e.features.length > 0) showPopup(e);
 			});
 
 			// Add click interaction for hex8
 			map.on('click', 'sai-fill-hex8', (e) => {
-				if (e.features.length > 0) {
-					const properties = e.features[0].properties;
-					console.log('Selected hex8 feature:', {
-						[saiMapState.selectedViz]: properties[saiMapState.selectedViz],
-						...properties
-					});
-					saiMapState.clickedData = {
-						[saiMapState.selectedViz]: properties[saiMapState.selectedViz],
-						...properties
-					};
-				}
+				if (e.features.length > 0) showPopup(e);
+			});
+
+			// Dismiss popup when clicking empty map area
+			map.on('click', (e) => {
+				const features = map.queryRenderedFeatures(e.point, {
+					layers: ['sai-fill-hex6', 'sai-fill-hex8']
+				});
+				if (features.length === 0) popup.remove();
 			});
 
 			// Add hover effects
@@ -260,8 +294,11 @@
 
 		// Fall back to population if the viz isn't defined
 		const vizProps = vizOptions[vizName] || vizOptions['population'];
-		saiMapState.selectedPalette = vizProps.defaultPalette;
-		saiMapState.reversePalette = vizProps.reverse;
+		// SAS travel-time layers use fixed hardcoded colors; only update palette for others
+		if (!sasColorExpression(selectedViz)) {
+			saiMapState.selectedPalette = vizProps.defaultPalette;
+			saiMapState.reversePalette = vizProps.reverse;
+		}
 
 		if (map) {
 			try {
@@ -310,53 +347,35 @@
 
 	// Helper function to update the fill style
 	function updateFillStyle() {
-		// Get the correct visualization properties based on the selected viz
-		let vizName = saiMapState.selectedViz;
-		if (vizName.startsWith('travel_time_no_sites_')) {
-			vizName = 'travel_time_no_sites';
-		} else if (vizName.startsWith('travel_time_') && vizName !== 'travel_time') {
-			vizName = 'travel_time';
-		} else if (vizName.startsWith('time_delta_no_sites_')) {
-			vizName = 'time_delta_no_sites';
-		}
-		const vizProps = vizOptions[vizName] || vizOptions['population'];
+		const viz = saiMapState.selectedViz;
+		const sasExpr = sasColorExpression(viz);
 
-		// Update hex6 layer if it exists
+		let colorExpr;
+		if (sasExpr) {
+			colorExpr = sasExpr;
+		} else {
+			let vizName = viz;
+			if (vizName.startsWith('travel_time_no_sites_')) vizName = 'travel_time_no_sites';
+			else if (vizName.startsWith('travel_time_') && vizName !== 'travel_time') vizName = 'travel_time';
+			else if (vizName.startsWith('time_delta_no_sites_')) vizName = 'time_delta_no_sites';
+			const vizProps = vizOptions[vizName] || vizOptions['population'];
+			colorExpr = [
+				'interpolate', ['linear'],
+				['coalesce', ['to-number', ['get', viz]], 0],
+				vizProps['stop0'], currentPalette[0],
+				vizProps['stop1'], currentPalette[1],
+				vizProps['stop2'], currentPalette[2],
+				vizProps['stop3'], currentPalette[3],
+				vizProps['stop4'], currentPalette[4]
+			];
+		}
+
 		if (map.getLayer('sai-fill-hex6')) {
-			map.setPaintProperty('sai-fill-hex6', 'fill-color', [
-				'interpolate',
-				['linear'],
-				['coalesce', ['to-number', ['get', saiMapState.selectedViz]], 0],
-				vizProps['stop0'],
-				currentPalette[0],
-				vizProps['stop1'],
-				currentPalette[1],
-				vizProps['stop2'],
-				currentPalette[2],
-				vizProps['stop3'],
-				currentPalette[3],
-				vizProps['stop4'],
-				currentPalette[4]
-			]);
+			map.setPaintProperty('sai-fill-hex6', 'fill-color', colorExpr);
 		}
 
-		// Update hex8 layer if it exists
 		if (map.getLayer('sai-fill-hex8')) {
-			map.setPaintProperty('sai-fill-hex8', 'fill-color', [
-				'interpolate',
-				['linear'],
-				['coalesce', ['to-number', ['get', saiMapState.selectedViz]], 0],
-				vizProps['stop0'],
-				currentPalette[0],
-				vizProps['stop1'],
-				currentPalette[1],
-				vizProps['stop2'],
-				currentPalette[2],
-				vizProps['stop3'],
-				currentPalette[3],
-				vizProps['stop4'],
-				currentPalette[4]
-			]);
+			map.setPaintProperty('sai-fill-hex8', 'fill-color', colorExpr);
 		}
 	}
 
@@ -365,6 +384,13 @@
 
 		mapboxgl.accessToken =
 			'pk.eyJ1IjoiYnJpZGdlc3RvcHJvc3Blcml0eSIsImEiOiJjbTVyaGcweGswYWpzMnhxMjRyZHhtMGh0In0.4YOL9xCKxxQ0u2wZ7AlNMg';
+
+		popup = new mapboxgl.Popup({
+			closeButton: false,
+			closeOnClick: true,
+			className: 'sas-popup-container',
+			maxWidth: '220px'
+		});
 
 		map = new mapboxgl.Map({
 			container: mapContainer,
@@ -397,3 +423,39 @@
 <div class="relative h-full w-full">
 	<div bind:this={mapContainer} class="absolute inset-0 h-full w-full"></div>
 </div>
+
+<style>
+	:global(.sas-popup-container .mapboxgl-popup-content) {
+		background: rgba(22, 19, 69, 0.92);
+		backdrop-filter: blur(6px);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 8px;
+		padding: 10px 14px;
+		color: white;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	}
+
+	:global(.sas-popup-container .mapboxgl-popup-tip) {
+		border-top-color: rgba(22, 19, 69, 0.92);
+	}
+
+	:global(.sas-popup .sas-popup-label) {
+		font-size: 11px;
+		opacity: 0.75;
+		margin-bottom: 2px;
+		font-family: 'Kumbh Sans', sans-serif;
+	}
+
+	:global(.sas-popup .sas-popup-value) {
+		font-size: 18px;
+		font-weight: 700;
+		font-family: 'Kumbh Sans', sans-serif;
+	}
+
+	:global(.sas-popup .sas-popup-pop) {
+		font-size: 11px;
+		opacity: 0.65;
+		margin-top: 6px;
+		font-family: 'Kumbh Sans', sans-serif;
+	}
+</style>

@@ -1,5 +1,6 @@
 // src/lib/services/map/MapController.svelte.js
 import mapboxgl from 'mapbox-gl';
+import { PmTilesSource } from 'mapbox-pmtiles';
 import { impactMapState } from '$lib/utils/state.svelte';
 import { HexLayerManager } from './HexLayerManager.svelte.js';
 import { RasterLayerManager } from './RasterLayerManager.svelte.js';
@@ -7,6 +8,7 @@ import { BridgeLayerManager } from './BridgeLayerManager.svelte.js';
 import { HealthLayerManager } from './HealthLayerManager.svelte.js';
 import { EduLayerManager } from './EduLayerManager.svelte.js';
 import { PathLayerManager } from './PathLayerManager.svelte.js';
+import { WaternetLayerManager } from './WaternetLayerManager.svelte.js';
 
 export class MapController {
 	// Initialize state as class fields
@@ -24,12 +26,19 @@ export class MapController {
 	healthLayerManager = null;
 	eduLayerManager = null;
 	pathLayerManager = null;
+	waternetLayerManager = null;
 
 	constructor(container) {
 		// Initialize map
 		console.log('Initializing MapController');
 		mapboxgl.accessToken =
 			'pk.eyJ1IjoiYnJpZGdlc3RvcHJvc3Blcml0eSIsImEiOiJjbTVyaGcweGswYWpzMnhxMjRyZHhtMGh0In0.4YOL9xCKxxQ0u2wZ7AlNMg';
+
+		try {
+			mapboxgl.Style.setSourceType(PmTilesSource.SOURCE_TYPE, PmTilesSource);
+		} catch (err) {
+			console.warn('PmTilesSource type already registered:', err);
+		}
 
 		this.map = new mapboxgl.Map({
 			container: container,
@@ -39,9 +48,9 @@ export class MapController {
 			hash: true
 		});
 
-
 		// Setup layer managers
 		this.rasterLayerManager = new RasterLayerManager(this.map);
+		this.waternetLayerManager = new WaternetLayerManager(this.map);
 
 		// Initialize hex layer manager first
 		this.hexLayerManager = new HexLayerManager(this.map);
@@ -96,6 +105,13 @@ export class MapController {
 
 			// Initialize hex layers first
 			await this.hexLayerManager.initialize();
+
+			// Waternet layer renders beneath the hex layer, so it must be inserted
+			// after hex exists. No cross-filter dependency on path/bridge/health/edu,
+			// so kick it off in parallel with those rather than awaiting it here.
+			this.waternetLayerManager
+				.initialize()
+				.catch((err) => console.error('Error initializing waternet layer:', err));
 
 			// Initialize path layers
 			await this.pathLayerManager.initialize();

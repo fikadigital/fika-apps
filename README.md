@@ -1,6 +1,6 @@
 # FIKA Apps
 
-A suite of interactive mapping applications for Bridges to Prosperity (B2P).
+A suite of interactive mapping applications for Fika.
 
 ## Features
 
@@ -55,6 +55,8 @@ npm run build
 Preview the production build with `npm run preview`.
 
 ## Deployment
+
+Uses Node v.22. Note that this will need to be updated before April 2027 when this version stops receiving support.
 
 The application is configured for Vercel deployment. Add the following environment variables in Vercel:
 

@@ -23,12 +23,48 @@
 	import fikaMapAppImage from '$lib/images/app-screenshots/fikamap-maponly.png';
 	import bridgeSitesAppImage from '$lib/images/app-screenshots/sites-zoom-sat.png';
 	import waternetAppImage from '$lib/images/app-screenshots/waternet-magma-4.png';
-	import bridgeDesignToolImage from '$lib/images/app-screenshots/bridge-design-tool.jpg';
+	import bridgeCostImage from '$lib/images/app-screenshots/bridge-cost.jpg';
+	import bridgeTypeImage from '$lib/images/app-screenshots/bridge-type.jpg';
+	import rntiBudgetImage from '$lib/images/app-screenshots/rnti-budget.jpg';
 	import fikaImpactImage from '$lib/images/app-screenshots/fika-impact-map1.png';
 	import fikaCollectImage from '$lib/images/app-screenshots/fika-collect-1.jpg';
 
+	// Supported-by logos
+	import adfLogo from '$lib/images/supported-by/adf.png';
+	import bplLogo from '$lib/images/supported-by/bpl.png';
+	import ciscofLogo from '$lib/images/supported-by/ciscof.png';
+	import gwLogo from '$lib/images/supported-by/gw.png';
+	import mbLogo from '$lib/images/supported-by/mb.png';
+	import pjmfLogo from '$lib/images/supported-by/pjmf.png';
+	import sahajLogo from '$lib/images/supported-by/sahaj.png';
+
+	const supportedByLogos = [
+		{ src: adfLogo, alt: 'Autodesk Foundation' },
+		{ src: bplLogo, alt: 'Better Planet Laboratory' },
+		{ src: ciscofLogo, alt: 'Cisco Foundation' },
+		{ src: gwLogo, alt: 'GiveWell' },
+		{ src: mbLogo, alt: 'Mapbox' },
+		{ src: pjmfLogo, alt: 'Patrick J. McGovern Foundation' },
+		{ src: sahajLogo, alt: 'Sahaj Software' }
+	];
 
 	let isLoaded = $state(false);
+	let heroSection = $state();
+	let heroVisible = $state(false);
+
+	onMount(() => {
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				if (entry.isIntersecting) {
+					heroVisible = true;
+					observer.disconnect();
+				}
+			},
+			{ threshold: 0.3 }
+		);
+		if (heroSection) observer.observe(heroSection);
+		return () => observer.disconnect();
+	});
 
 	// Define grid items for better maintainability
 	const gridItems = [
@@ -113,9 +149,9 @@
 			image: bridgeSitesAppImage,
 			alt: 'map of ethiopia',
 			title: 'Bridges Built Worldwide',
-			description: 'Locations of bridges built by Bridges to Prosperity around the world',
+			description: 'Locations of bridges built by Fika around the world',
 			href: 'https://bridge-locations-map.vercel.app/',
-			learn: 'https://bridgestoprosperity.org/our-impact/'
+			learn: 'https://fika.org/our-impact/'
 		},
 				{
 			image: fikaCollectImage,
@@ -141,7 +177,7 @@
 			title: "Côte d'Ivoire Bridge Impact Assessment",
 			description:
 				"Analysis done to determine where bridges are needed to support new schools built in Côte d'Ivoire",
-			href: 'https://bridgestoprosperity.github.io/civ-map/home/',
+			href: 'https://fikadigital.github.io/civ-map/home/',
 			learn: ''
 		},
 		{
@@ -154,11 +190,27 @@
 			learn: ''
 		},
 		{
-			image: bridgeDesignToolImage,
-			alt: 'Bridge design tool app screenshot',
-			title: 'Bridge Design Tools',
-			description: 'A suite of tools designed to support the building and design of trailbridges',
-			href: 'https://bridgedesignv3.streamlit.app/Updated_Bridge_Design_Helper',
+			image: bridgeCostImage,
+			alt: 'Bridge Cost Estimator screenshot',
+			title: 'Bridge Cost Estimator',
+			description: 'Estimate the cost of building a trailbridge based on site conditions and design parameters',
+			href: 'https://bridgedesignv3.streamlit.app/Bridge_Price_Estimation',
+			learn: ''
+		},
+		{
+			image: rntiBudgetImage,
+			alt: 'RNTI Planner screenshot',
+			title: 'RNTI Planner',
+			description: 'Plan rural network transportation infrastructure budgets and prioritize bridge investments across a region',
+			href: 'https://bridgedesignv3.streamlit.app/RNTI_Budget_Calculator',
+			learn: ''
+		},
+		{
+			image: bridgeTypeImage,
+			alt: 'Bridge Type Recommendation Engine screenshot',
+			title: 'Bridge Type Recommendation Engine',
+			description: 'Get a recommended bridge type based on site-specific conditions and engineering constraints',
+			href: 'https://bridgedesignv3.streamlit.app/Bridge_Type_Recommender',
 			learn: ''
 		}
 	];
@@ -185,7 +237,7 @@
 
 							<div
 								class="apps-slide col-span-3 col-start-2 row-start-3 flex items-center justify-center rounded-md min-[800px]:col-span-2 min-[800px]:col-start-3 min-[800px]:row-start-3">
-								<span class="title-text relative z-10">Apps</span>
+								<span class="title-text relative z-10">Digital</span>
 							</div>
 
 							{#each gridItems as item}
@@ -201,6 +253,42 @@
 			</div>
 		</header>
 
+		<section
+			bind:this={heroSection}
+			class="px-4 py-16 sm:min-[800px]:px-6 min-[800px]:px-4 lg:min-[800px]:px-8 md:py-24">
+			<div class="mx-auto flex max-w-6xl flex-col gap-10 md:flex-row md:items-center md:gap-16">
+				<h1
+					class="hero-init text-4xl font-bold leading-tight text-secondary md:flex-1 md:text-5xl lg:text-6xl"
+					class:hero-slide-left={heroVisible}>
+					Data & AI models delivering rural access at scale
+				</h1>
+				<div class="flex flex-col gap-6 md:flex-1">
+					<p
+						class="hero-init text-lg leading-relaxed text-gray-600 md:text-xl"
+						class:hero-fade-up={heroVisible}
+						class:animation-delay-200={heroVisible}>
+						Rural communities experience outsized negative effects when a lack of basic
+						infrastructure prevents them from reaching important destinations.
+					</p>
+					<p
+						class="hero-init text-lg leading-relaxed text-gray-600 md:text-xl"
+						class:hero-fade-up={heroVisible}
+						class:animation-delay-400={heroVisible}>
+						Our Digital group conducts research, produces data, and develops products to
+						close data gaps and transform rural access. The technology we build scales our work
+						as we aim to transform rural access solutions around the world.
+					</p>
+					<a
+						href="https://apps.fikadigital.org/sign-up"
+						class="hero-init btn btn-lg mt-2 self-start border-none bg-primary px-10 text-white transition-transform hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-lg"
+						class:hero-fade-up={heroVisible}
+						class:animation-delay-600={heroVisible}>
+						Sign Up
+					</a>
+				</div>
+			</div>
+		</section>
+
 		<div class="px-4 sm:min-[800px]:px-6 min-[800px]:px-4 lg:min-[800px]:px-8">
 			<div class="grid grid-cols-1 gap-8 py-8 md:grid-cols-2 md:gap-10 xl:grid-cols-3 xl:gap-12">
 				{#each appCards as card}
@@ -210,6 +298,22 @@
 				{/each}
 			</div>
 		</div>
+
+		<section class="border-t border-gray-100 px-4 py-16 sm:min-[800px]:px-6 min-[800px]:px-4 lg:min-[800px]:px-8">
+			<div class="mx-auto max-w-6xl">
+				<h2 class="text-center text-sm font-semibold uppercase tracking-wide text-gray-500">
+					Supported By
+				</h2>
+				<div class="mt-8 flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
+					{#each supportedByLogos as logo}
+						<img
+							src={logo.src}
+							alt={logo.alt}
+							class="h-12 w-auto object-contain grayscale transition duration-300 hover:grayscale-0 md:h-16" />
+					{/each}
+				</div>
+			</div>
+		</section>
 	</div>
 </div>
 
@@ -275,6 +379,48 @@
 
 	.animation-delay-300 {
 		animation-delay: 300ms;
+	}
+
+	.animation-delay-400 {
+		animation-delay: 400ms;
+	}
+
+	.animation-delay-600 {
+		animation-delay: 600ms;
+	}
+
+	.hero-init {
+		opacity: 0;
+	}
+
+	.hero-slide-left {
+		animation: heroSlideLeft 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	.hero-fade-up {
+		animation: heroFadeUp 0.8s ease-out forwards;
+	}
+
+	@keyframes heroSlideLeft {
+		from {
+			transform: translateX(-60px);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
+	}
+
+	@keyframes heroFadeUp {
+		from {
+			transform: translateY(20px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
 	}
 
 	.title-text {
