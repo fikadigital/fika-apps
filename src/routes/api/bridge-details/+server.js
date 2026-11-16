@@ -1,24 +1,11 @@
 import { json } from '@sveltejs/kit';
 import pg from 'pg';
 import { env } from '$env/dynamic/private';
+import { impactFetch, upstreamError, BROWSER_CACHE } from '$lib/server/impactApi.js';
 
 /** @type {import('./$types').RequestHandler} */
-export async function GET({ url, platform }) {
+export async function GET({ url, platform, request }) {
 	try {
-		// Get database connection string
-		const connectionString = platform?.env?.DATABASE_URL || env.DATABASE_URL;
-
-		// Require a database connection
-		if (!connectionString) {
-			return json(
-				{
-					error: 'Database connection missing',
-					details: 'No connection string provided'
-				},
-				{ status: 500 }
-			);
-		}
-
 		// Parse query parameters
 		const bridgeIndex = url.searchParams.get('bridgeIndex');
 
@@ -29,6 +16,49 @@ export async function GET({ url, platform }) {
 					details: 'bridgeIndex query parameter is required'
 				},
 				{ status: 400 }
+			);
+		}
+
+		const lng = url.searchParams.get('lng');
+		const lat = url.searchParams.get('lat');
+		const position =
+			lng && lat ? `?lng=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}` : '';
+
+		// Prefer the Django API when configured (the token stays server-side)
+		let upstream = null;
+		try {
+			upstream = await impactFetch(
+				`/geostore/api/bridges/${encodeURIComponent(parseInt(bridgeIndex, 10))}/${position}`,
+				{
+					platform,
+					request,
+					label: `bridge ${bridgeIndex}`
+				}
+			);
+		} catch (apiError) {
+			console.error('Impact API request failed:', apiError);
+			return json({ error: 'API request failed', details: apiError.message }, { status: 502 });
+		}
+		if (upstream) {
+			if (upstream.status === 404) {
+				return json(
+					{ error: 'Bridge not found', details: `No bridge found with index: ${bridgeIndex}` },
+					{ status: 404 }
+				);
+			}
+			if (!upstream.ok) return upstreamError(upstream, json);
+			return json(await upstream.json(), BROWSER_CACHE);
+		}
+
+		// Fallback: query Postgres directly when the impact API is not configured
+		const connectionString = platform?.env?.DATABASE_URL || env.DATABASE_URL;
+		if (!connectionString) {
+			return json(
+				{
+					error: 'Not configured',
+					details: 'Neither IMPACT_API_URL (with a credential) nor DATABASE_URL is set'
+				},
+				{ status: 503 }
 			);
 		}
 

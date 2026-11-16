@@ -1,3 +1,4 @@
+import { authFetch } from '$lib/auth/clerk.svelte.js';
 import { impactMapState } from '$lib/utils/state.svelte';
 
 export class PathLayerManager {
@@ -120,7 +121,7 @@ export class PathLayerManager {
 			console.log('Fetching paths for hex:', h3Index);
 
 			// Query paths for the selected hex
-			const response = await fetch(`/api/paths?h3_index=${encodeURIComponent(h3Index)}`);
+			const response = await authFetch(`/api/paths?h3_index=${encodeURIComponent(h3Index)}`);
 
 			if (!response.ok) {
 				const errorData = await response.json();
@@ -192,7 +193,7 @@ export class PathLayerManager {
 			console.log('Fetching paths for destination:', destinationIndex);
 
 			// Query paths for the selected destination
-			const response = await fetch(
+			const response = await authFetch(
 				`/api/paths?destination_index=${encodeURIComponent(destinationIndex)}`
 			);
 

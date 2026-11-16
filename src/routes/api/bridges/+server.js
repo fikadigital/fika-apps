@@ -1,101 +1,44 @@
 import { json } from '@sveltejs/kit';
-import pg from 'pg';
-import { env } from '$env/dynamic/private';
+import { impactFetch, upstreamError } from '$lib/server/impactApi.js';
 
-/** @type {import('./$types').RequestHandler} */
-export async function GET({ url, platform }) {
+/**
+ * Bridge points for a map view, from the impact API, as a GeoJSON FeatureCollection.
+ *   ?bbox=minLon,minLat,maxLon,maxLat[&type=...][&limit=n]
+ * The API caps a list at 20,000 bridges (the main map draws all of them from tiles), so a
+ * view is asked for, not the whole table. The old version of this route queried the database
+ * directly and filled in made-up values (country, year, people served).
+ *
+ * @type {import('./$types').RequestHandler}
+ */
+export async function GET({ url, platform, request }) {
+	const query = new URLSearchParams();
+	for (const name of ['bbox', 'type', 'limit']) {
+		const value = url.searchParams.get(name);
+		if (value) query.set(name, value);
+	}
+
+	let upstream = null;
 	try {
-		// Get environment variables from all possible sources
-		let connectionString =
-			platform?.env?.DATABASE_URL || env.DATABASE_URL || process.env.DATABASE_URL;
+		upstream = await impactFetch(`/geostore/api/bridges/?${query}`, {
+			platform,
+			request,
+			label: 'bridges in view'
+		});
+	} catch (apiError) {
+		console.error('Impact API request failed:', apiError);
+		return json({ error: 'API request failed', details: apiError.message }, { status: 502 });
+	}
 
-		// If connection string uses the wrong domain, correct it
-		if (connectionString && connectionString.includes('czujcujmkk4k')) {
-			connectionString = connectionString.replace(
-				'fika-impact-database.czujcujmkk4k.us-west-1.rds.amazonaws.com',
-				'fika-impact-database.cdoaycgiqb5w.us-west-1.rds.amazonaws.com'
-			);
-		}
-
-		if (!connectionString) {
-			return json({ error: 'Database connection missing' }, { status: 500 });
-		}
-
-		// Parse query parameters
-		const year = url.searchParams.get('year');
-		const type = url.searchParams.get('type');
-		const limit = url.searchParams.get('limit') || '120000';
-
-		try {
-			// Create client and connect
-			const client = new pg.Client({
-				connectionString,
-				statement_timeout: 60000,
-				connectionTimeoutMillis: 60000
-			});
-			await client.connect();
-
-			// Get the table structure to understand what columns we have
-			const tableColumns = await client.query(`
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'bridges';
-            `);
-
-			// Construct a query based on detected columns
-			const columnNames = tableColumns.rows.map((col) => col.column_name);
-			const hasGeom = tableColumns.rows.some((col) => col.column_name === 'geometry');
-
-			// Build query based on actual columns from the table structure
-			const query = `
-                SELECT 
-                    ogc_fid as id, 
-                    ${columnNames.includes('bridge_index') ? 'bridge_index,' : ''} 
-                    ${columnNames.includes('exit_point_index') ? 'exit_point_index,' : ''}
-                    ${hasGeom ? "encode(ST_AsBinary(geometry), 'hex') as geometry," : ''} 
-                    ${hasGeom ? 'CAST(ST_X(geometry) AS DECIMAL(10,6)) as longitude,' : ''}
-                    ${hasGeom ? 'CAST(ST_Y(geometry) AS DECIMAL(10,6)) as latitude,' : ''}
-                    'Bridge' as bridge_type,
-                    2023 as year_completed,
-                    'Rwanda' as country,
-                    'Bridge' as name,
-                    0 as span_length,
-                    0 as communities_served,
-                    0 as people_served
-                FROM bridges
-                WHERE 1=1
-                ${year ? ' AND year_completed = $1' : ''}
-                ${type ? ` AND bridge_type = $${year ? '2' : '1'}` : ''}
-                LIMIT $${year && type ? '3' : year || type ? '2' : '1'}
-            `;
-
-			// Set up query parameters
-			const params = [];
-			if (year) params.push(parseInt(year));
-			if (type) params.push(type);
-			params.push(parseInt(limit));
-
-			// Execute the query
-			const result = await client.query(query, params);
-			await client.end();
-
-			return json(result.rows);
-		} catch (dbError) {
-			return json(
-				{
-					error: 'Database error',
-					details: dbError.message
-				},
-				{ status: 500 }
-			);
-		}
-	} catch (error) {
+	if (!upstream) {
 		return json(
 			{
-				error: 'Server error',
-				details: error.message
+				error: 'Not configured',
+				details: 'IMPACT_API_URL is not set, so there is no bridge data source'
 			},
-			{ status: 500 }
+			{ status: 503 }
 		);
 	}
+	if (upstream.status === 400) return json(await upstream.json(), { status: 400 });
+	if (!upstream.ok) return upstreamError(upstream, json);
+	return json(await upstream.json());
 }

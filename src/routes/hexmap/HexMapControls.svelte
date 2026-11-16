@@ -6,6 +6,20 @@
 
 	// Create a derived value for the current visualization's properties
 	let currentVizProps = $derived(vizOptions[hexMapState.selectedViz]);
+
+	// The kinds of destination the travel-time views can refer to (the suffix of the
+	// database's travel_time_<destination> columns).
+	const destinations = [
+		'all_health',
+		'health_posts',
+		'health_centers',
+		'major_hospitals',
+		'all_education',
+		'primary_schools',
+		'secondary_schools',
+		'major_roads',
+		'semi_dense_urban'
+	];
 </script>
 
 <div class="space-y-4">
@@ -23,6 +37,27 @@
 				{/each}
 			</select>
 		</div>
+
+		<!-- The travel-time views are per kind of destination; population is not -->
+		{#if hexMapState.selectedViz !== 'population'}
+			<p class="mt-3 font-bold">Destination</p>
+			<div class="form-control mt-2">
+				<select
+					class="select select-bordered select-secondary bg-transparent p-1 font-mono"
+					bind:value={hexMapState.destination}>
+					{#each destinations as destination}
+						<option value={destination}>{destination.replace(/_/g, ' ')}</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
+
+		<!-- What the last load showed, or why nothing is drawn -->
+		{#if hexMapState.notice}
+			<p class="mt-2 text-sm">{hexMapState.notice}</p>
+		{:else if hexMapState.hexCount > 0}
+			<p class="mt-2 text-sm">{hexMapState.hexCount.toLocaleString()} hexagons in view</p>
+		{/if}
 
 		<!-- statistics display -->
 		{#if currentVizProps}

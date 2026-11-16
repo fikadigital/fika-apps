@@ -1,3 +1,4 @@
+import { authFetch } from '$lib/auth/clerk.svelte.js';
 import bridgeIcon from '$lib/images/map-icons/bridge-icon-bubble.png';
 import { impactMapState } from '$lib/utils/state.svelte';
 
@@ -150,12 +151,15 @@ export class BridgeLayerManager {
 		if (features.length) {
 			const feature = features[0];
 			const bridgeIndex = feature.properties.bridge_index;
+			const [lng, lat] = feature.geometry?.coordinates ?? [];
+			// The index is shared by facilities in different countries: say where the click was.
+			const where = Number.isFinite(lng) && Number.isFinite(lat) ? `&lng=${lng}&lat=${lat}` : '';
 			console.log('Clicked bridge feature:', feature.properties);
 
 			// Query the database for this bridge and its served hexes
 			try {
-				const response = await fetch(
-					`/api/bridge-details?bridgeIndex=${encodeURIComponent(bridgeIndex)}`
+				const response = await authFetch(
+					`/api/bridge-details?bridgeIndex=${encodeURIComponent(bridgeIndex)}${where}`
 				);
 
 				if (!response.ok) {

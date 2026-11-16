@@ -1,3 +1,4 @@
+import { authFetch } from '$lib/auth/clerk.svelte.js';
 import healthIcon from '$lib/images/map-icons/health-icon-bubble.png';
 import { impactMapState } from '$lib/utils/state.svelte';
 
@@ -160,12 +161,15 @@ export class HealthLayerManager {
 		if (features.length) {
 			const feature = features[0];
 			const facilityIndex = feature.properties.all_health_facilities_index;
+			const [lng, lat] = feature.geometry?.coordinates ?? [];
+			// The index is shared by facilities in different countries: say where the click was.
+			const where = Number.isFinite(lng) && Number.isFinite(lat) ? `&lng=${lng}&lat=${lat}` : '';
 			console.log('Clicked health facility feature:', feature.properties);
 
 			// Query the database for this health facility and its served hexes
 			try {
-				const response = await fetch(
-					`/api/health-facility-details?facilityIndex=${encodeURIComponent(facilityIndex)}`
+				const response = await authFetch(
+					`/api/health-facility-details?facilityIndex=${encodeURIComponent(facilityIndex)}${where}`
 				);
 
 				if (!response.ok) {

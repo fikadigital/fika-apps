@@ -1,3 +1,4 @@
+import { authFetch } from '$lib/auth/clerk.svelte.js';
 import eduIcon from '$lib/images/map-icons/edu-icon-bubble.png';
 import { impactMapState } from '$lib/utils/state.svelte';
 
@@ -164,12 +165,15 @@ export class EduLayerManager {
 		if (features.length) {
 			const feature = features[0];
 			const facilityIndex = feature.properties.all_education_facilities_index;
+			const [lng, lat] = feature.geometry?.coordinates ?? [];
+			// The index is shared by facilities in different countries: say where the click was.
+			const where = Number.isFinite(lng) && Number.isFinite(lat) ? `&lng=${lng}&lat=${lat}` : '';
 			console.log('Clicked education facility feature:', feature.properties);
 
 			// Query the database for this education facility and its served hexes
 			try {
-				const response = await fetch(
-					`/api/education-facility-details?facilityIndex=${encodeURIComponent(facilityIndex)}`
+				const response = await authFetch(
+					`/api/education-facility-details?facilityIndex=${encodeURIComponent(facilityIndex)}${where}`
 				);
 
 				if (!response.ok) {

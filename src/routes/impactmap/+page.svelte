@@ -1,9 +1,17 @@
 <script>
+	import { onMount } from 'svelte';
 	import ImpactMap from '$lib/components/impactmap/ImpactMap.svelte';
 	import ImpactMapControls from '$lib/components/impactmap/ImpactMapControls.svelte';
+	import { initClerk } from '$lib/auth/clerk.svelte.js';
 	import SideNav from '$lib/components/SideNav.svelte';
 	import ControlPanel from '$lib/components/ControlPanel.svelte';
 	import HexDataPanel from '$lib/components/HexDataPanel.svelte';
+	// Warm the hex API in the background while the map loads (see /api/impact-warmup).
+	onMount(() => {
+		fetch('/api/impact-warmup').catch(() => {});
+		// Load the shared Clerk session so a signed-in user's token is sent with API calls.
+		initClerk().catch(() => {});
+	});
 </script>
 
 <svelte:head>
