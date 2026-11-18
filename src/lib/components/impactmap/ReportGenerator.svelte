@@ -4,7 +4,8 @@
 	import { reportState } from '$lib/utils/state.svelte.js';
 	import { mapRegistry } from '$lib/services/impactmap/mapRegistry.svelte.js';
 	import { countryAt } from '$lib/utils/impactmap/countryLookup.js';
-	import { fetchHierarchy, dropdownLevels } from '$lib/utils/impactmap/boundaryTree.js';
+	import { fetchHierarchy, fetchShape, dropdownLevels } from '$lib/utils/impactmap/boundaryTree.js';
+	import AreaMap from './AreaMap.svelte';
 
 	/** @type {'idle' | 'loading' | 'ready' | 'error'} */
 	let status = $state('idle');
@@ -21,6 +22,41 @@
 	let selected = $state([]);
 
 	const levels = $derived(tree ? dropdownLevels(tree, selected) : []);
+
+	// The outline shown in the map card: the deepest area chosen, else the whole country.
+	/** @type {'idle' | 'loading' | 'ready' | 'error'} */
+	let shapeStatus = $state('idle');
+	let shape = $state(null);
+	const shapeId = $derived(tree ? (reportState.region?.fika_id ?? tree.country?.fika_id) : null);
+	const areaLabel = $derived(
+		reportState.region
+			? `${reportState.region.name} (admin level ${reportState.region.level})`
+			: country
+				? `${country.name} (whole country)`
+				: ''
+	);
+
+	$effect(() => {
+		const id = shapeId;
+		if (!id) {
+			shape = null;
+			shapeStatus = 'idle';
+			return;
+		}
+		const controller = new AbortController();
+		shapeStatus = 'loading';
+		fetchShape(id, { signal: controller.signal })
+			.then((feature) => {
+				shape = feature;
+				shapeStatus = feature ? 'ready' : 'error';
+			})
+			.catch((error) => {
+				if (error.name === 'AbortError') return;
+				console.error('Area outline failed:', error);
+				shapeStatus = 'error';
+			});
+		return () => controller.abort();
+	});
 
 	// Look up the country at the centre of the map each time the popup opens. The map
 	// can't move while the popup covers it, so one lookup per opening is enough.
@@ -110,7 +146,7 @@
 		role="presentation"
 		onclick={(e) => e.target === e.currentTarget && close()}>
 		<div
-			class="relative flex max-h-[90vh] min-h-[320px] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+			class="relative flex max-h-[90vh] min-h-[320px] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="report-generator-title">
@@ -137,57 +173,86 @@
 				</p>
 
 				{#if country}
-					<section aria-label="Choose an area">
-						{#if treeStatus === 'loading'}
-							<p class="text-sm text-gray-500" aria-live="polite">Loading administrative areas…</p>
-						{:else if treeStatus === 'none'}
-							<p class="text-sm text-gray-600">
-								No administrative areas below the country are available for {country.name}.
-							</p>
-						{:else if treeStatus === 'error'}
-							<p class="text-sm text-gray-600">
-								We could not load the administrative areas for {country.name}.
-							</p>
-						{:else if treeStatus === 'ready' && tree}
-							<p class="mb-3 text-sm text-gray-600">
-								{country.name} has {tree.max_level}
-								administrative {tree.max_level === 1 ? 'level' : 'levels'} below the country. Choose
-								an area at any level.
-							</p>
-							<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-								{#each levels as l (l.level)}
-									{@const id = `admin-level-${l.level}`}
-									<div class="flex flex-col gap-1">
-										<label for={id} class="text-sm font-semibold text-secondary">
-											Admin level {l.level}
-										</label>
-										<select
-											{id}
-											class="select select-bordered w-full"
-											disabled={!l.enabled}
-											onchange={(e) => choose(l.level, e.currentTarget.value)}>
-											<option value="" selected={!l.chosen}>
-												{#if l.level > 1 && !levels[l.level - 2].chosen}
-													Choose level {l.level - 1} first
-												{:else if !l.options.length}
-													No areas
-												{:else}
-													All of {l.level === 1 ? country.name : levels[l.level - 2].chosen?.name}
-												{/if}
-											</option>
-											{#each l.options as option (option.fika_id)}
-												<option
-													value={option.fika_id}
-													selected={option.fika_id === l.chosen?.fika_id}>
-													{option.name}
+					<div class="grid grid-cols-1 gap-6 md:grid-cols-5">
+						<section aria-label="Choose an area" class="md:col-span-3">
+							{#if treeStatus === 'loading'}
+								<p class="text-sm text-gray-500" aria-live="polite">
+									Loading administrative areas…
+								</p>
+							{:else if treeStatus === 'none'}
+								<p class="text-sm text-gray-600">
+									No administrative areas below the country are available for {country.name}.
+								</p>
+							{:else if treeStatus === 'error'}
+								<p class="text-sm text-gray-600">
+									We could not load the administrative areas for {country.name}.
+								</p>
+							{:else if treeStatus === 'ready' && tree}
+								<p class="mb-3 text-sm text-gray-600">
+									{country.name} has {tree.max_level}
+									administrative {tree.max_level === 1 ? 'level' : 'levels'} below the country. Choose
+									an area at any level.
+								</p>
+								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+									{#each levels as l (l.level)}
+										{@const id = `admin-level-${l.level}`}
+										<div class="flex flex-col gap-1">
+											<label for={id} class="text-sm font-semibold text-secondary">
+												Admin level {l.level}
+											</label>
+											<select
+												{id}
+												class="select select-bordered w-full"
+												disabled={!l.enabled}
+												onchange={(e) => choose(l.level, e.currentTarget.value)}>
+												<option value="" selected={!l.chosen}>
+													{#if l.level > 1 && !levels[l.level - 2].chosen}
+														Choose level {l.level - 1} first
+													{:else if !l.options.length}
+														No areas
+													{:else}
+														All of {l.level === 1 ? country.name : levels[l.level - 2].chosen?.name}
+													{/if}
 												</option>
-											{/each}
-										</select>
-									</div>
-								{/each}
-							</div>
+												{#each l.options as option (option.fika_id)}
+													<option
+														value={option.fika_id}
+														selected={option.fika_id === l.chosen?.fika_id}>
+														{option.name}
+													</option>
+												{/each}
+											</select>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</section>
+						{#if tree}
+							<section
+								aria-label="Selected area map"
+								class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:col-span-2">
+								<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
+									<p class="text-xs uppercase tracking-wide text-gray-500">Selected area</p>
+									<p class="text-sm font-semibold text-secondary">{areaLabel}</p>
+								</div>
+								<div class="relative h-72 md:h-full md:min-h-[300px]">
+									<AreaMap feature={shape} />
+									{#if shapeStatus === 'loading'}
+										<div
+											class="absolute inset-0 flex items-center justify-center bg-white/60 text-sm text-gray-600"
+											aria-live="polite">
+											Loading outline…
+										</div>
+									{:else if shapeStatus === 'error'}
+										<div
+											class="absolute inset-0 flex items-center justify-center bg-white/70 p-4 text-center text-sm text-gray-600">
+											We could not load the outline of this area.
+										</div>
+									{/if}
+								</div>
+							</section>
 						{/if}
-					</section>
+					</div>
 				{/if}
 			</div>
 		</div>

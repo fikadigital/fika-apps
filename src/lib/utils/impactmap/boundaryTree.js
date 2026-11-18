@@ -49,3 +49,50 @@ export function dropdownLevels(tree, selected) {
 	}
 	return levels;
 }
+
+const shapeCache = new Map();
+
+/**
+ * One area's outline as a GeoJSON Feature, or null when the API holds none for that id.
+ * Throws if the request fails.
+ * @param {string} id a fika_id or gid
+ * @param {{ signal?: AbortSignal }} [opts]
+ */
+export async function fetchShape(id, { signal } = {}) {
+	if (shapeCache.has(id)) return shapeCache.get(id);
+	const res = await fetch(`/api/boundaries/shape?id=${encodeURIComponent(id)}`, { signal });
+	if (res.status === 404) {
+		shapeCache.set(id, null);
+		return null;
+	}
+	if (!res.ok) throw new Error(`Boundaries request failed (${res.status})`);
+	const feature = await res.json();
+	shapeCache.set(id, feature);
+	return feature;
+}
+
+/**
+ * The south-west and north-east corners of a GeoJSON geometry, as [[w, s], [e, n]].
+ * @param {{ coordinates: any }} geometry
+ */
+export function boundsOf(geometry) {
+	let w = Infinity;
+	let s = Infinity;
+	let e = -Infinity;
+	let n = -Infinity;
+	const walk = (c) => {
+		if (typeof c[0] === 'number') {
+			w = Math.min(w, c[0]);
+			e = Math.max(e, c[0]);
+			s = Math.min(s, c[1]);
+			n = Math.max(n, c[1]);
+		} else {
+			c.forEach(walk);
+		}
+	};
+	walk(geometry.coordinates);
+	return [
+		[w, s],
+		[e, n]
+	];
+}
