@@ -1,12 +1,14 @@
 import { env } from '$env/dynamic/private';
-import { impactAuthHeaders } from '$lib/server/impactAuth.js';
+import { impactAuthHeaders, machineAuthHeaders } from '$lib/server/impactAuth.js';
 
 /**
  * Calls the Django boundaries API on behalf of a SvelteKit route, with this app's own
  * machine token (see impactAuth.js). The boundaries API is read-only for machine tokens.
  *
- * BOUNDARIES_API_URL points it somewhere other than IMPACT_API_URL, which is handy when
- * the impact API runs locally but boundaries should come from production.
+ * BOUNDARIES_API_URL points it somewhere other than IMPACT_API_URL, and BOUNDARIES_M2M_SECRET
+ * gives it its own machine secret. Both are handy when the impact API runs locally but
+ * boundaries should come from production, which needs a production machine. Unset, the
+ * impact API's address and credential are used.
  *
  * Returns the upstream Response, or null when the API is not configured.
  *
@@ -21,7 +23,10 @@ export async function boundariesFetch(path, { platform, label }) {
 		env.IMPACT_API_URL;
 	if (!apiBase) return null;
 
-	const headers = await impactAuthHeaders(platform).catch(() => null);
+	const ownSecret = platform?.env?.BOUNDARIES_M2M_SECRET || env.BOUNDARIES_M2M_SECRET;
+	const headers = await (
+		ownSecret ? machineAuthHeaders(ownSecret) : impactAuthHeaders(platform)
+	).catch(() => null);
 	if (!headers) return null;
 
 	const t0 = performance.now();

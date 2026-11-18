@@ -10,10 +10,11 @@ import { env } from '$env/dynamic/private';
 const LIFETIME_SECONDS = 600;
 const REFRESH_BEFORE_MS = 60_000; // renew a minute before expiry
 
-/** @type {{ token: string, expiresAt: number } | null} */
-let cached = null;
-/** @type {Promise<string> | null} */
-let inflight = null;
+/** One cached token per machine secret, so two backends can use two secrets side by side.
+ * @type {Map<string, { token: string, expiresAt: number }>} */
+const cached = new Map();
+/** @type {Map<string, Promise<string>>} */
+const inflight = new Map();
 
 async function fetchToken(machineSecret) {
 	const started = performance.now();
@@ -25,7 +26,7 @@ async function fetchToken(machineSecret) {
 	});
 	if (!res.ok) throw new Error(`Clerk token request failed (${res.status})`);
 	const body = await res.json();
-	cached = { token: body.token, expiresAt: Date.now() + LIFETIME_SECONDS * 1000 };
+	cached.set(machineSecret, { token: body.token, expiresAt: Date.now() + LIFETIME_SECONDS * 1000 });
 	console.log(
 		`[impact] new machine token from Clerk in ${Math.round(performance.now() - started)} ms (valid ${LIFETIME_SECONDS}s)`
 	);
@@ -33,10 +34,21 @@ async function fetchToken(machineSecret) {
 }
 
 async function machineToken(machineSecret) {
-	if (cached && Date.now() < cached.expiresAt - REFRESH_BEFORE_MS) return cached.token;
+	const hit = cached.get(machineSecret);
+	if (hit && Date.now() < hit.expiresAt - REFRESH_BEFORE_MS) return hit.token;
 	// One refresh at a time, so a burst of clicks makes one Clerk call.
-	inflight ??= fetchToken(machineSecret).finally(() => (inflight = null));
-	return inflight;
+	if (!inflight.has(machineSecret)) {
+		inflight.set(
+			machineSecret,
+			fetchToken(machineSecret).finally(() => inflight.delete(machineSecret))
+		);
+	}
+	return inflight.get(machineSecret);
+}
+
+/** Headers for one specific machine secret (a Bearer machine token). */
+export async function machineAuthHeaders(machineSecret) {
+	return { Authorization: `Bearer ${await machineToken(machineSecret)}` };
 }
 
 /** This app's machine secret. CLERK_PIPELINE_MACHINE_SECRET is the name the shared .env
