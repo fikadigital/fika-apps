@@ -1,11 +1,12 @@
 <script>
 	import { untrack } from 'svelte';
-	import { XmarkSolid, ChevronDownSolid } from 'svelte-awesome-icons';
+	import { XmarkSolid } from 'svelte-awesome-icons';
 	import { reportState } from '$lib/utils/state.svelte.js';
 	import { mapRegistry } from '$lib/services/impactmap/mapRegistry.svelte.js';
 	import { countryAt } from '$lib/utils/impactmap/countryLookup.js';
 	import { fetchHierarchy, fetchShape, dropdownLevels } from '$lib/utils/impactmap/boundaryTree.js';
 	import AreaMap from './AreaMap.svelte';
+	import FilterSection from './FilterSection.svelte';
 
 	/** @type {'idle' | 'loading' | 'ready' | 'error'} */
 	let status = $state('idle');
@@ -182,28 +183,20 @@
 				</p>
 
 				{#if country}
-					<div class="flex flex-col gap-5">
-						<section aria-label="Admin level" class="rounded-lg border border-gray-200 shadow-sm">
-							<button
-								type="button"
-								class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-								aria-expanded={levelsOpen}
-								aria-controls="admin-level-body"
-								onclick={() => (levelsOpen = !levelsOpen)}>
-								<span class="min-w-0">
-									<span class="block text-sm font-semibold text-secondary">Admin level</span>
-									{#if !levelsOpen && levelSummary}
-										<span class="block truncate text-xs text-gray-500">{levelSummary}</span>
-									{/if}
-								</span>
-								<ChevronDownSolid
-									class="h-4 w-4 shrink-0 text-secondary transition-transform {levelsOpen
-										? 'rotate-180'
-										: ''}" />
-							</button>
-
-							{#if levelsOpen}
-								<div id="admin-level-body" class="border-t border-gray-200 px-4 py-4">
+					<div class="grid grid-cols-1 gap-5 md:grid-cols-[20rem_minmax(0,1fr)]">
+						<!-- Filters: slides vertically when its sections outgrow the card -->
+						<aside
+							aria-label="Filters"
+							class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:h-[28rem]">
+							<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
+								<h3 class="text-sm font-semibold text-secondary">Filters</h3>
+							</div>
+							<div class="flex flex-1 flex-col gap-3 overflow-y-auto bg-gray-50/50 p-3">
+								<FilterSection
+									title="Admin level"
+									id="admin-level-body"
+									summary={levelSummary}
+									bind:open={levelsOpen}>
 									{#if treeStatus === 'loading'}
 										<p class="text-sm text-gray-500" aria-live="polite">
 											Loading administrative areas…
@@ -217,21 +210,21 @@
 											We could not load the administrative areas for {country.name}.
 										</p>
 									{:else if treeStatus === 'ready' && tree}
-										<p class="mb-3 text-sm text-gray-600">
+										<p class="mb-3 text-xs text-gray-600">
 											{country.name} has {tree.max_level}
 											administrative {tree.max_level === 1 ? 'level' : 'levels'} below the country. Choose
 											an area at any level.
 										</p>
-										<div class="flex gap-4 overflow-x-auto pb-1">
+										<div class="flex flex-col gap-3">
 											{#each levels as l (l.level)}
 												{@const id = `admin-level-${l.level}`}
-												<div class="flex min-w-[11rem] flex-1 flex-col gap-1">
+												<div class="flex flex-col gap-1">
 													<label for={id} class="text-sm font-semibold text-secondary">
 														Admin level {l.level}
 													</label>
 													<select
 														{id}
-														class="select select-bordered w-full"
+														class="select select-bordered select-sm w-full"
 														disabled={!l.enabled}
 														onchange={(e) => choose(l.level, e.currentTarget.value)}>
 														<option value="" selected={!l.chosen}>
@@ -257,19 +250,19 @@
 											{/each}
 										</div>
 									{/if}
-								</div>
-							{/if}
-						</section>
+								</FilterSection>
+							</div>
+						</aside>
 
 						{#if tree}
 							<section
 								aria-label="Selected area map"
-								class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+								class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:h-[28rem]">
 								<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
 									<p class="text-xs uppercase tracking-wide text-gray-500">Selected area</p>
 									<p class="text-sm font-semibold text-secondary">{areaLabel}</p>
 								</div>
-								<div class="relative h-80">
+								<div class="relative h-80 md:h-auto md:flex-1">
 									<AreaMap feature={shape} />
 									{#if shapeStatus === 'loading'}
 										<div
