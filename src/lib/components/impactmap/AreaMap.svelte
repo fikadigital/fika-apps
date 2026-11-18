@@ -136,14 +136,18 @@
 				id: 'bridge-ranked',
 				type: 'circle',
 				source: 'bridges-ranked',
+				// Draw the best-ranked bridges last, so they sit on top where dots overlap.
+				layout: { 'circle-sort-key': ['-', 1001, ['get', 'rank']] },
 				paint: {
+					'circle-opacity': 0.85,
 					'circle-color': [
 						'match',
 						['get', 'tier'],
 						...BRIDGE_TIERS.flatMap((t, i) => [i, t.color]),
 						'#6b7280'
 					],
-					'circle-radius': ['match', ['get', 'tier'], 0, 8, 1, 7, 2, 6, 3, 5, 4, 4, 4],
+					// Worse bands are bigger, so where bridges share a spot each band shows as a ring around the better ones.
+					'circle-radius': ['match', ['get', 'tier'], 0, 4.5, 1, 6.5, 2, 8.5, 3, 6, 4, 5, 5],
 					'circle-stroke-width': 1.5,
 					'circle-stroke-color': '#ffffff'
 				}

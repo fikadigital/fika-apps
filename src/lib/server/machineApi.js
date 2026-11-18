@@ -27,11 +27,25 @@ export async function machineFetch(
 	).catch(() => null);
 	if (!headers) return null;
 
+	const url = `${apiBase.replace(/\/$/, '')}${path}`;
+	const request = () =>
+		fetch(url, {
+			headers: { ...headers, 'Accept-Encoding': 'gzip' },
+			signal: AbortSignal.timeout(timeoutMs)
+		});
 	const t0 = performance.now();
-	const res = await fetch(`${apiBase.replace(/\/$/, '')}${path}`, {
-		headers: { ...headers, 'Accept-Encoding': 'gzip' },
-		signal: AbortSignal.timeout(timeoutMs)
-	});
+	let res;
+	try {
+		res = await request();
+	} catch (error) {
+		// A refused or timed-out connection is worth one more try; these are harmless reads.
+		if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw error;
+		console.warn(
+			`[${tag}] ${label}: connection failed (${error?.cause?.code ?? error?.message}); retrying once`
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		res = await request();
+	}
 	console.log(
 		`[${tag}] ${label}: app token, Django ${Math.round(performance.now() - t0)} ms (${res.status})`
 	);

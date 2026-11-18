@@ -55,11 +55,14 @@
 	let bridgeStatus = $state('idle');
 	/** What the map draws, set in one go so its mode and data never disagree. */
 	let bridgeLayer = $state(null);
+	/** Bumped by the "Try again" button so the loading effect runs once more. */
+	let bridgeAttempt = $state(0);
 
 	$effect(() => {
 		const area = reportState.region?.fika_id ?? null;
 		const top = reportState.bridgeTop;
 		const weight = reportState.bridgeWeight;
+		void bridgeAttempt;
 		bridgeLayer = null;
 		if (!area) {
 			bridgeStatus = 'idle';
@@ -329,6 +332,11 @@
 										<BridgeSpectrum
 											selected={reportState.bridgeTop}
 											onselect={(top) => (reportState.bridgeTop = top)} />
+										{#if bridgeSummary}
+											<p class="mt-2 text-xs font-semibold text-secondary" aria-live="polite">
+												{bridgeSummary}
+											</p>
+										{/if}
 
 										<p class="mb-1 mt-4 text-xs font-semibold text-secondary">Rank by</p>
 										<div
@@ -386,6 +394,12 @@
 									<p
 										class="absolute left-2 top-2 rounded-full bg-white/90 px-3 py-1 text-xs text-gray-700 shadow">
 										We could not load the bridges for this area.
+										<button
+											type="button"
+											class="link ml-1 text-secondary"
+											onclick={() => bridgeAttempt++}>
+											Try again
+										</button>
 									</p>
 								{/if}
 								{#if mapMessage}
