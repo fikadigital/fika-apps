@@ -5,7 +5,12 @@
 	import { mapRegistry } from '$lib/services/impactmap/mapRegistry.svelte.js';
 	import { countryAt } from '$lib/utils/impactmap/countryLookup.js';
 	import { fetchHierarchy, fetchShape, dropdownLevels } from '$lib/utils/impactmap/boundaryTree.js';
-	import { fetchAreaBridges, fetchRankedBridges } from '$lib/utils/impactmap/areaBridges.js';
+	import {
+		fetchAreaBridges,
+		fetchRankedBridges,
+		cachedRankedBridges,
+		warmRankedBridges
+	} from '$lib/utils/impactmap/areaBridges.js';
 	import AreaMap from './AreaMap.svelte';
 	import BridgeSpectrum from './BridgeSpectrum.svelte';
 	import FilterSection from './FilterSection.svelte';
@@ -63,11 +68,19 @@
 		const top = reportState.bridgeTop;
 		const weight = reportState.bridgeWeight;
 		void bridgeAttempt;
-		bridgeLayer = null;
 		if (!area) {
+			bridgeLayer = null;
 			bridgeStatus = 'idle';
 			return;
 		}
+		// A band picked after the top 1000 has arrived needs no request at all.
+		const instant = top ? cachedRankedBridges(area, top, weight) : null;
+		if (instant) {
+			bridgeLayer = { mode: 'ranked', data: instant };
+			bridgeStatus = 'ready';
+			return;
+		}
+		bridgeLayer = null;
 		const controller = new AbortController();
 		const { signal } = controller;
 		bridgeStatus = 'loading';
@@ -75,6 +88,8 @@
 			.then((data) => {
 				bridgeLayer = { mode: top ? 'ranked' : 'all', data };
 				bridgeStatus = 'ready';
+				// With all the bridges drawn, fetch the ranking quietly so the first band is instant.
+				if (!top) warmRankedBridges(area, weight);
 			})
 			.catch((error) => {
 				if (error.name === 'AbortError') return;

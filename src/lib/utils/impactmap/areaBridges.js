@@ -22,15 +22,59 @@ export function bandLabel(index) {
 	return `Ranks ${from}–${BRIDGE_TIERS[index].top}`;
 }
 
-const cache = new Map();
+// Requests are shared: asking for something already fetched, or already on its way, returns the
+// same result. A failed request is forgotten so that "Try again" really tries again.
+const requests = new Map();
+/** The answers that have arrived, by url, so they can be read without waiting. */
+const resolved = new Map();
 
-async function getJson(url, signal) {
-	if (cache.has(url)) return cache.get(url);
-	const res = await fetch(url, { signal });
-	if (!res.ok) throw new Error(`Bridges request failed (${res.status})`);
-	const data = await res.json();
-	cache.set(url, data);
-	return data;
+function shared(url) {
+	if (!requests.has(url)) {
+		const request = fetch(url)
+			.then((res) => {
+				if (!res.ok) throw new Error(`Bridges request failed (${res.status})`);
+				return res.json();
+			})
+			.then((data) => {
+				resolved.set(url, data);
+				return data;
+			})
+			.catch((error) => {
+				requests.delete(url);
+				throw error;
+			});
+		requests.set(url, request);
+	}
+	return requests.get(url);
+}
+
+/** Lets a caller stop waiting without cancelling the request that others may share. */
+function until(promise, signal) {
+	if (!signal) return promise;
+	return new Promise((resolve, reject) => {
+		const abort = () => reject(new DOMException('Aborted', 'AbortError'));
+		if (signal.aborted) return abort();
+		signal.addEventListener('abort', abort, { once: true });
+		promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+	});
+}
+
+// The server ranks bridges 1..N whatever N is, so one request for the top 1000 answers every
+// choice on the spectrum; the browser slices it.
+const RANKED_POOL = 1000;
+const areaUrl = (area) => `/api/areas/bridges?area=${encodeURIComponent(area)}&limit=20000`;
+const rankedUrl = (area, weight) =>
+	`/api/areas/bridges/ranked?area=${encodeURIComponent(area)}&top=${RANKED_POOL}&weight=${weight}`;
+
+/** The first `top` ranks of a ranked response, each with a `tier` (rank band) for colouring. */
+function sliceRanked(data, top) {
+	return {
+		...data,
+		top,
+		features: data.features
+			.filter((f) => f.properties.rank <= top)
+			.map((f) => ({ ...f, properties: { ...f.properties, tier: tierOf(f.properties.rank) } }))
+	};
 }
 
 /**
@@ -39,26 +83,28 @@ async function getJson(url, signal) {
  * @param {{ signal?: AbortSignal }} [opts]
  */
 export function fetchAreaBridges(area, { signal } = {}) {
-	return getJson(`/api/areas/bridges?area=${encodeURIComponent(area)}&limit=20000`, signal);
+	return until(shared(areaUrl(area)), signal);
 }
 
 /**
- * The top `top` bridges in the area, each with a `tier` (rank band) added for colouring.
+ * The top `top` bridges in the area. The first call for an area and weighting asks the server for
+ * the top 1000; later calls, for any `top`, are answered from that without another request.
  * @param {string} area a fika_id below the country level
  * @param {number} top 1 to 1000
  * @param {'none' | 'population'} weight
  * @param {{ signal?: AbortSignal }} [opts]
  */
 export async function fetchRankedBridges(area, top, weight, { signal } = {}) {
-	const data = await getJson(
-		`/api/areas/bridges/ranked?area=${encodeURIComponent(area)}&top=${top}&weight=${weight}`,
-		signal
-	);
-	return {
-		...data,
-		features: data.features.map((f) => ({
-			...f,
-			properties: { ...f.properties, tier: tierOf(f.properties.rank) }
-		}))
-	};
+	return sliceRanked(await until(shared(rankedUrl(area, weight)), signal), top);
+}
+
+/** Starts fetching the ranked bridges in the background, so a later choice is instant. */
+export function warmRankedBridges(area, weight) {
+	shared(rankedUrl(area, weight)).catch(() => {});
+}
+
+/** The ranked bridges if they are already here, else null. Never starts a request. */
+export function cachedRankedBridges(area, top, weight) {
+	const data = resolved.get(rankedUrl(area, weight));
+	return data ? sliceRanked(data, top) : null;
 }
