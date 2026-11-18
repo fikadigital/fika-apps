@@ -1,6 +1,6 @@
 <script>
 	import { untrack } from 'svelte';
-	import { XmarkSolid } from 'svelte-awesome-icons';
+	import { XmarkSolid, ChevronDownSolid } from 'svelte-awesome-icons';
 	import { reportState } from '$lib/utils/state.svelte.js';
 	import { mapRegistry } from '$lib/services/impactmap/mapRegistry.svelte.js';
 	import { countryAt } from '$lib/utils/impactmap/countryLookup.js';
@@ -22,6 +22,15 @@
 	let selected = $state([]);
 
 	const levels = $derived(tree ? dropdownLevels(tree, selected) : []);
+
+	// The admin level card can be folded away; its header then summarises the choice.
+	let levelsOpen = $state(true);
+	const levelSummary = $derived(
+		levels
+			.filter((l) => l.chosen)
+			.map((l) => l.chosen.name)
+			.join(' › ') || (country ? `${country.name} (whole country)` : '')
+	);
 
 	// The outline shown in the map card: the deepest area chosen, else the whole country.
 	/** @type {'idle' | 'loading' | 'ready' | 'error'} */
@@ -173,69 +182,94 @@
 				</p>
 
 				{#if country}
-					<div class="grid grid-cols-1 gap-6 md:grid-cols-5">
-						<section aria-label="Choose an area" class="md:col-span-3">
-							{#if treeStatus === 'loading'}
-								<p class="text-sm text-gray-500" aria-live="polite">
-									Loading administrative areas…
-								</p>
-							{:else if treeStatus === 'none'}
-								<p class="text-sm text-gray-600">
-									No administrative areas below the country are available for {country.name}.
-								</p>
-							{:else if treeStatus === 'error'}
-								<p class="text-sm text-gray-600">
-									We could not load the administrative areas for {country.name}.
-								</p>
-							{:else if treeStatus === 'ready' && tree}
-								<p class="mb-3 text-sm text-gray-600">
-									{country.name} has {tree.max_level}
-									administrative {tree.max_level === 1 ? 'level' : 'levels'} below the country. Choose
-									an area at any level.
-								</p>
-								<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									{#each levels as l (l.level)}
-										{@const id = `admin-level-${l.level}`}
-										<div class="flex flex-col gap-1">
-											<label for={id} class="text-sm font-semibold text-secondary">
-												Admin level {l.level}
-											</label>
-											<select
-												{id}
-												class="select select-bordered w-full"
-												disabled={!l.enabled}
-												onchange={(e) => choose(l.level, e.currentTarget.value)}>
-												<option value="" selected={!l.chosen}>
-													{#if l.level > 1 && !levels[l.level - 2].chosen}
-														Choose level {l.level - 1} first
-													{:else if !l.options.length}
-														No areas
-													{:else}
-														All of {l.level === 1 ? country.name : levels[l.level - 2].chosen?.name}
-													{/if}
-												</option>
-												{#each l.options as option (option.fika_id)}
-													<option
-														value={option.fika_id}
-														selected={option.fika_id === l.chosen?.fika_id}>
-														{option.name}
-													</option>
-												{/each}
-											</select>
+					<div class="flex flex-col gap-5">
+						<section aria-label="Admin level" class="rounded-lg border border-gray-200 shadow-sm">
+							<button
+								type="button"
+								class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+								aria-expanded={levelsOpen}
+								aria-controls="admin-level-body"
+								onclick={() => (levelsOpen = !levelsOpen)}>
+								<span class="min-w-0">
+									<span class="block text-sm font-semibold text-secondary">Admin level</span>
+									{#if !levelsOpen && levelSummary}
+										<span class="block truncate text-xs text-gray-500">{levelSummary}</span>
+									{/if}
+								</span>
+								<ChevronDownSolid
+									class="h-4 w-4 shrink-0 text-secondary transition-transform {levelsOpen
+										? 'rotate-180'
+										: ''}" />
+							</button>
+
+							{#if levelsOpen}
+								<div id="admin-level-body" class="border-t border-gray-200 px-4 py-4">
+									{#if treeStatus === 'loading'}
+										<p class="text-sm text-gray-500" aria-live="polite">
+											Loading administrative areas…
+										</p>
+									{:else if treeStatus === 'none'}
+										<p class="text-sm text-gray-600">
+											No administrative areas below the country are available for {country.name}.
+										</p>
+									{:else if treeStatus === 'error'}
+										<p class="text-sm text-gray-600">
+											We could not load the administrative areas for {country.name}.
+										</p>
+									{:else if treeStatus === 'ready' && tree}
+										<p class="mb-3 text-sm text-gray-600">
+											{country.name} has {tree.max_level}
+											administrative {tree.max_level === 1 ? 'level' : 'levels'} below the country. Choose
+											an area at any level.
+										</p>
+										<div class="flex gap-4 overflow-x-auto pb-1">
+											{#each levels as l (l.level)}
+												{@const id = `admin-level-${l.level}`}
+												<div class="flex min-w-[11rem] flex-1 flex-col gap-1">
+													<label for={id} class="text-sm font-semibold text-secondary">
+														Admin level {l.level}
+													</label>
+													<select
+														{id}
+														class="select select-bordered w-full"
+														disabled={!l.enabled}
+														onchange={(e) => choose(l.level, e.currentTarget.value)}>
+														<option value="" selected={!l.chosen}>
+															{#if l.level > 1 && !levels[l.level - 2].chosen}
+																Choose level {l.level - 1} first
+															{:else if !l.options.length}
+																No areas
+															{:else}
+																All of {l.level === 1
+																	? country.name
+																	: levels[l.level - 2].chosen?.name}
+															{/if}
+														</option>
+														{#each l.options as option (option.fika_id)}
+															<option
+																value={option.fika_id}
+																selected={option.fika_id === l.chosen?.fika_id}>
+																{option.name}
+															</option>
+														{/each}
+													</select>
+												</div>
+											{/each}
 										</div>
-									{/each}
+									{/if}
 								</div>
 							{/if}
 						</section>
+
 						{#if tree}
 							<section
 								aria-label="Selected area map"
-								class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:col-span-2">
+								class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm">
 								<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
 									<p class="text-xs uppercase tracking-wide text-gray-500">Selected area</p>
 									<p class="text-sm font-semibold text-secondary">{areaLabel}</p>
 								</div>
-								<div class="relative h-72 md:h-full md:min-h-[300px]">
+								<div class="relative h-80">
 									<AreaMap feature={shape} />
 									{#if shapeStatus === 'loading'}
 										<div
