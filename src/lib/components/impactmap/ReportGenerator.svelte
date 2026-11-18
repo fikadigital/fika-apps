@@ -5,7 +5,9 @@
 	import { mapRegistry } from '$lib/services/impactmap/mapRegistry.svelte.js';
 	import { countryAt } from '$lib/utils/impactmap/countryLookup.js';
 	import { fetchHierarchy, fetchShape, dropdownLevels } from '$lib/utils/impactmap/boundaryTree.js';
+	import { fetchAreaBridges, fetchRankedBridges } from '$lib/utils/impactmap/areaBridges.js';
 	import AreaMap from './AreaMap.svelte';
+	import BridgeSpectrum from './BridgeSpectrum.svelte';
 	import FilterSection from './FilterSection.svelte';
 
 	/** @type {'idle' | 'loading' | 'ready' | 'error'} */
@@ -45,6 +47,49 @@
 				? `${country.name} (whole country)`
 				: ''
 	);
+
+	// Bridges for the chosen area: every bridge (clustered on the map), or the top N by rank.
+	// Bridges are only available below the country level, so nothing loads for the whole country.
+	let bridgesOpen = $state(true);
+	/** @type {'idle' | 'loading' | 'ready' | 'error'} */
+	let bridgeStatus = $state('idle');
+	/** What the map draws, set in one go so its mode and data never disagree. */
+	let bridgeLayer = $state(null);
+
+	$effect(() => {
+		const area = reportState.region?.fika_id ?? null;
+		const top = reportState.bridgeTop;
+		const weight = reportState.bridgeWeight;
+		bridgeLayer = null;
+		if (!area) {
+			bridgeStatus = 'idle';
+			return;
+		}
+		const controller = new AbortController();
+		const { signal } = controller;
+		bridgeStatus = 'loading';
+		(top ? fetchRankedBridges(area, top, weight, { signal }) : fetchAreaBridges(area, { signal }))
+			.then((data) => {
+				bridgeLayer = { mode: top ? 'ranked' : 'all', data };
+				bridgeStatus = 'ready';
+			})
+			.catch((error) => {
+				if (error.name === 'AbortError') return;
+				console.error('Bridges failed:', error);
+				bridgeStatus = 'error';
+			});
+		return () => controller.abort();
+	});
+
+	const bridgeSummary = $derived.by(() => {
+		if (!bridgeLayer) return '';
+		const n = bridgeLayer.data.features.length.toLocaleString();
+		if (bridgeLayer.mode === 'ranked') {
+			const how = reportState.bridgeWeight === 'population' ? 'population-weighted' : 'unweighted';
+			return `Top ${reportState.bridgeTop} bridges, ${how} (${n} shown)`;
+		}
+		return `${n} bridges${bridgeLayer.data.truncated ? ' (more exist than are shown)' : ''}`;
+	});
 
 	// What the map card says while it has nothing to draw yet.
 	const mapMessage = $derived.by(() => {
@@ -265,6 +310,54 @@
 										</div>
 									{/if}
 								</FilterSection>
+
+								<FilterSection
+									title="Bridge selection criteria"
+									id="bridge-criteria-body"
+									summary={reportState.bridgeTop ? `Top ${reportState.bridgeTop}` : 'All bridges'}
+									bind:open={bridgesOpen}>
+									{#if !reportState.region}
+										<p class="text-xs text-gray-600">
+											Choose an admin area first. Bridges are shown for an area, not for a whole
+											country.
+										</p>
+									{:else}
+										<p class="mb-2 text-xs text-gray-600">
+											Show only the highest-ranked bridges in {reportState.region.name}. Pick how
+											many.
+										</p>
+										<BridgeSpectrum
+											selected={reportState.bridgeTop}
+											onselect={(top) => (reportState.bridgeTop = top)} />
+
+										<p class="mb-1 mt-4 text-xs font-semibold text-secondary">Rank by</p>
+										<div
+											class="join w-full"
+											role="group"
+											aria-label="What to weight the ranking by">
+											{#each [['none', 'None'], ['population', 'Population']] as [value, label] (value)}
+												<button
+													type="button"
+													class="btn join-item btn-sm flex-1 {reportState.bridgeWeight === value
+														? 'btn-secondary'
+														: 'btn-outline'}"
+													aria-pressed={reportState.bridgeWeight === value}
+													onclick={() => (reportState.bridgeWeight = value)}>
+													{label}
+												</button>
+											{/each}
+										</div>
+
+										{#if reportState.bridgeTop}
+											<button
+												type="button"
+												class="link mt-3 text-xs text-secondary"
+												onclick={() => (reportState.bridgeTop = null)}>
+												Show all bridges
+											</button>
+										{/if}
+									{/if}
+								</FilterSection>
 							</div>
 						</aside>
 
@@ -274,9 +367,27 @@
 							<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
 								<p class="text-xs uppercase tracking-wide text-gray-500">Selected area</p>
 								<p class="text-sm font-semibold text-secondary">{areaLabel}</p>
+								{#if bridgeSummary}
+									<p class="text-xs text-gray-600">{bridgeSummary}</p>
+								{/if}
 							</div>
 							<div class="relative h-80 md:h-auto md:flex-1">
-								<AreaMap feature={shape} />
+								<AreaMap
+									feature={shape}
+									bridges={bridgeLayer?.data}
+									bridgeMode={bridgeLayer?.mode} />
+								{#if bridgeStatus === 'loading'}
+									<p
+										class="absolute left-2 top-2 rounded-full bg-white/90 px-3 py-1 text-xs text-gray-700 shadow"
+										aria-live="polite">
+										Loading bridges…
+									</p>
+								{:else if bridgeStatus === 'error'}
+									<p
+										class="absolute left-2 top-2 rounded-full bg-white/90 px-3 py-1 text-xs text-gray-700 shadow">
+										We could not load the bridges for this area.
+									</p>
+								{/if}
 								{#if mapMessage}
 									<div
 										class="absolute inset-0 flex items-center justify-center bg-white/70 p-4 text-center text-sm text-gray-600"

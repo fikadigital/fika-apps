@@ -1,41 +1,21 @@
-import { env } from '$env/dynamic/private';
-import { impactAuthHeaders, machineAuthHeaders } from '$lib/server/impactAuth.js';
+import { machineFetch } from '$lib/server/machineApi.js';
 
 /**
  * Calls the Django boundaries API on behalf of a SvelteKit route, with this app's own
- * machine token (see impactAuth.js). The boundaries API is read-only for machine tokens.
+ * machine token. The boundaries API is read-only for machine tokens.
  *
- * BOUNDARIES_API_URL points it somewhere other than IMPACT_API_URL, and BOUNDARIES_M2M_SECRET
- * gives it its own machine secret. Both are handy when the impact API runs locally but
- * boundaries should come from production, which needs a production machine. Unset, the
- * impact API's address and credential are used.
- *
- * Returns the upstream Response, or null when the API is not configured.
+ * BOUNDARIES_API_URL and BOUNDARIES_M2M_SECRET point it somewhere other than the impact API,
+ * which is handy when the impact API runs locally but boundaries come from production.
  *
  * @param {string} path e.g. '/countries/ETH/hierarchy/'
  * @param {{ platform?: any, label: string }} opts
  */
-export async function boundariesFetch(path, { platform, label }) {
-	const apiBase =
-		platform?.env?.BOUNDARIES_API_URL ||
-		env.BOUNDARIES_API_URL ||
-		platform?.env?.IMPACT_API_URL ||
-		env.IMPACT_API_URL;
-	if (!apiBase) return null;
-
-	const ownSecret = platform?.env?.BOUNDARIES_M2M_SECRET || env.BOUNDARIES_M2M_SECRET;
-	const headers = await (
-		ownSecret ? machineAuthHeaders(ownSecret) : impactAuthHeaders(platform)
-	).catch(() => null);
-	if (!headers) return null;
-
-	const t0 = performance.now();
-	const res = await fetch(`${apiBase.replace(/\/$/, '')}/boundaries/api${path}`, {
-		headers: { ...headers, 'Accept-Encoding': 'gzip' },
-		signal: AbortSignal.timeout(40000)
+export function boundariesFetch(path, { platform, label }) {
+	return machineFetch(`/boundaries/api${path}`, {
+		platform,
+		label,
+		tag: 'boundaries',
+		urlEnv: 'BOUNDARIES_API_URL',
+		secretEnv: 'BOUNDARIES_M2M_SECRET'
 	});
-	console.log(
-		`[boundaries] ${label}: app token, Django ${Math.round(performance.now() - t0)} ms (${res.status})`
-	);
-	return res;
 }

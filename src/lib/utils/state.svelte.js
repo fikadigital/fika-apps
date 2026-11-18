@@ -157,7 +157,11 @@ const vizLabState = $state({
 const reportState = $state({
 	open: false,
 	// The deepest admin area chosen in the report generator: { level, fika_id, gid, name }
-	region: null
+	region: null,
+	// How many top-ranked bridges to show (25, 50, 100, 500, 1000), or null for all of them
+	bridgeTop: null,
+	// What the ranking is weighted by: 'none' or 'population'
+	bridgeWeight: 'none'
 });
 
 export {
