@@ -25,7 +25,7 @@
 	const levels = $derived(tree ? dropdownLevels(tree, selected) : []);
 
 	// The admin level card can be folded away; its header then summarises the choice.
-	let levelsOpen = $state(true);
+	let levelsOpen = $state(false);
 	const levelSummary = $derived(
 		levels
 			.filter((l) => l.chosen)
@@ -45,6 +45,16 @@
 				? `${country.name} (whole country)`
 				: ''
 	);
+
+	// What the map card says while it has nothing to draw yet.
+	const mapMessage = $derived.by(() => {
+		if (treeStatus === 'loading') return 'Loading administrative areas…';
+		if (treeStatus === 'none' && !tree) return `No boundaries are held for ${country?.name}.`;
+		if (treeStatus === 'error') return 'We could not load the boundaries for this country.';
+		if (shapeStatus === 'loading') return 'Loading outline…';
+		if (shapeStatus === 'error') return 'We could not load the outline of this area.';
+		return '';
+	});
 
 	$effect(() => {
 		const id = shapeId;
@@ -73,7 +83,11 @@
 	$effect(() => {
 		if (!reportState.open) return;
 		const controller = new AbortController();
-		untrack(() => lookup(controller.signal));
+		untrack(() => {
+			// Each time the popup opens, the admin level section starts folded.
+			levelsOpen = false;
+			lookup(controller.signal);
+		});
 		return () => controller.abort();
 	});
 
@@ -156,7 +170,7 @@
 		role="presentation"
 		onclick={(e) => e.target === e.currentTarget && close()}>
 		<div
-			class="relative flex max-h-[90vh] min-h-[320px] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+			class="relative flex max-h-[90vh] min-h-[320px] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="report-generator-title">
@@ -169,8 +183,8 @@
 				<XmarkSolid />
 			</button>
 
-			<div class="flex flex-col gap-5 overflow-y-auto p-6 pr-14">
-				<p class="text-left text-lg text-secondary" aria-live="polite">
+			<div class="flex flex-col gap-5 overflow-y-auto p-6">
+				<p class="pr-10 text-left text-lg text-secondary" aria-live="polite">
 					{#if status === 'loading'}
 						<span class="text-gray-500">Finding where you are zoomed in…</span>
 					{:else if status === 'ready' && country}
@@ -183,11 +197,11 @@
 				</p>
 
 				{#if country}
-					<div class="grid grid-cols-1 gap-5 md:grid-cols-[20rem_minmax(0,1fr)]">
+					<div class="grid grid-cols-1 gap-5 md:grid-cols-[22rem_minmax(0,1fr)]">
 						<!-- Filters: slides vertically when its sections outgrow the card -->
 						<aside
 							aria-label="Filters"
-							class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:h-[28rem]">
+							class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:h-[min(36rem,62vh)]">
 							<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
 								<h3 class="text-sm font-semibold text-secondary">Filters</h3>
 							</div>
@@ -254,31 +268,24 @@
 							</div>
 						</aside>
 
-						{#if tree}
-							<section
-								aria-label="Selected area map"
-								class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:h-[28rem]">
-								<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
-									<p class="text-xs uppercase tracking-wide text-gray-500">Selected area</p>
-									<p class="text-sm font-semibold text-secondary">{areaLabel}</p>
-								</div>
-								<div class="relative h-80 md:h-auto md:flex-1">
-									<AreaMap feature={shape} />
-									{#if shapeStatus === 'loading'}
-										<div
-											class="absolute inset-0 flex items-center justify-center bg-white/60 text-sm text-gray-600"
-											aria-live="polite">
-											Loading outline…
-										</div>
-									{:else if shapeStatus === 'error'}
-										<div
-											class="absolute inset-0 flex items-center justify-center bg-white/70 p-4 text-center text-sm text-gray-600">
-											We could not load the outline of this area.
-										</div>
-									{/if}
-								</div>
-							</section>
-						{/if}
+						<section
+							aria-label="Selected area map"
+							class="flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm md:h-[min(36rem,62vh)]">
+							<div class="border-b border-gray-200 bg-gray-50 px-3 py-2">
+								<p class="text-xs uppercase tracking-wide text-gray-500">Selected area</p>
+								<p class="text-sm font-semibold text-secondary">{areaLabel}</p>
+							</div>
+							<div class="relative h-80 md:h-auto md:flex-1">
+								<AreaMap feature={shape} />
+								{#if mapMessage}
+									<div
+										class="absolute inset-0 flex items-center justify-center bg-white/70 p-4 text-center text-sm text-gray-600"
+										aria-live="polite">
+										{mapMessage}
+									</div>
+								{/if}
+							</div>
+						</section>
 					</div>
 				{/if}
 			</div>
