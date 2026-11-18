@@ -154,7 +154,12 @@ const vizLabState = $state({
 	}
 });
 
+const reportState = $state({
+	open: false
+});
+
 export {
+	reportState,
 	generalState,
 	vizLabState,
 	waternetMapState,

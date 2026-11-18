@@ -6,12 +6,24 @@
 	import SideNav from '$lib/components/SideNav.svelte';
 	import ControlPanel from '$lib/components/ControlPanel.svelte';
 	import HexDataPanel from '$lib/components/HexDataPanel.svelte';
+	import ReportGenerator from '$lib/components/impactmap/ReportGenerator.svelte';
+	import { PrintSolid } from 'svelte-awesome-icons';
+	import { reportState } from '$lib/utils/state.svelte.js';
 	// Warm the hex API in the background while the map loads (see /api/impact-warmup).
 	onMount(() => {
 		fetch('/api/impact-warmup').catch(() => {});
 		// Load the shared Clerk session so a signed-in user's token is sent with API calls.
 		initClerk().catch(() => {});
 	});
+
+	const reportNavItems = [
+		{
+			icon: PrintSolid,
+			label: 'Report',
+			action: () => (reportState.open = true),
+			isActive: () => reportState.open
+		}
+	];
 </script>
 
 <svelte:head>
@@ -42,5 +54,7 @@
 
 	<!-- example of how i could add custom items to sideNav -->
 	<!-- <SideNav items={saiNavItems}/> -->
-	<SideNav />
+	<SideNav items={reportNavItems} />
+
+	<ReportGenerator />
 </div>
