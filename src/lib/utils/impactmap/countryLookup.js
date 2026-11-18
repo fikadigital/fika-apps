@@ -9,7 +9,7 @@ const cache = new Map();
  * Picks one country from a Tilequery response. Where a border is disputed the tileset
  * returns one entry per worldview; use the "all" entry, else Mapbox's default (US) view.
  * @param {{ properties: Record<string, any> }[]} features
- * @returns {{ name: string, code: string } | null}
+ * @returns {{ name: string, code: string, code3: string } | null}
  */
 export function pickCountry(features) {
 	const inView = (p) => {
@@ -17,7 +17,7 @@ export function pickCountry(features) {
 		return views.includes('all') || views.includes('US');
 	};
 	const hit = features.map((f) => f.properties).find(inView);
-	return hit ? { name: hit.name_en, code: hit.iso_3166_1 } : null;
+	return hit ? { name: hit.name_en, code: hit.iso_3166_1, code3: hit.iso_3166_1_alpha_3 } : null;
 }
 
 /**

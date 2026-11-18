@@ -155,7 +155,9 @@ const vizLabState = $state({
 });
 
 const reportState = $state({
-	open: false
+	open: false,
+	// The deepest admin area chosen in the report generator: { level, fika_id, gid, name }
+	region: null
 });
 
 export {
