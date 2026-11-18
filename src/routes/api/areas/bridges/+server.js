@@ -65,6 +65,16 @@ export async function GET({ url, platform }) {
 		return json({ error: 'Area not found', details: `No area ${area}` }, { status: 404 });
 	}
 	if (upstream.status === 400) return json(await upstream.json(), { status: 400 });
+	if (upstream.status === 504 || upstream.status === 500) {
+		// The API gives up after about 30 s on a very large area and answers 504 (or 500).
+		return json(
+			{
+				error: 'Area too large',
+				details: 'The API could not answer for this area in time. Try a smaller area.'
+			},
+			{ status: 504 }
+		);
+	}
 	if (!upstream.ok) {
 		return json(
 			{ error: 'API error', details: `Upstream returned ${upstream.status}` },

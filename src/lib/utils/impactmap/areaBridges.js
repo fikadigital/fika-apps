@@ -32,7 +32,11 @@ function shared(url) {
 	if (!requests.has(url)) {
 		const request = fetch(url)
 			.then((res) => {
-				if (!res.ok) throw new Error(`Bridges request failed (${res.status})`);
+				if (!res.ok) {
+					throw Object.assign(new Error(`Bridges request failed (${res.status})`), {
+						status: res.status
+					});
+				}
 				return res.json();
 			})
 			.then((data) => {

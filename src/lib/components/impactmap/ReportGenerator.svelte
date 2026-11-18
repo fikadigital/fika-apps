@@ -62,12 +62,15 @@
 	let bridgeLayer = $state(null);
 	/** Bumped by the "Try again" button so the loading effect runs once more. */
 	let bridgeAttempt = $state(0);
+	/** True when the API gave up because the area is too large to answer in time. */
+	let bridgeTooLarge = $state(false);
 
 	$effect(() => {
 		const area = reportState.region?.fika_id ?? null;
 		const top = reportState.bridgeTop;
 		const weight = reportState.bridgeWeight;
 		void bridgeAttempt;
+		bridgeTooLarge = false;
 		if (!area) {
 			bridgeLayer = null;
 			bridgeStatus = 'idle';
@@ -94,6 +97,7 @@
 			.catch((error) => {
 				if (error.name === 'AbortError') return;
 				console.error('Bridges failed:', error);
+				bridgeTooLarge = error.status === 504;
 				bridgeStatus = 'error';
 			});
 		return () => controller.abort();
@@ -354,6 +358,12 @@
 												<span class="loading loading-spinner loading-xs"></span>
 												Loading bridges…
 											</p>
+										{:else if bridgeStatus === 'error'}
+											<p class="mt-2 text-xs font-semibold text-red-700" aria-live="polite">
+												{bridgeTooLarge
+													? 'This area is too large to load bridges. Choose a smaller area.'
+													: 'Bridges could not be loaded.'}
+											</p>
 										{:else if bridgeSummary}
 											<p class="mt-2 text-xs font-semibold text-secondary" aria-live="polite">
 												{bridgeSummary}
@@ -415,14 +425,19 @@
 									</p>
 								{:else if bridgeStatus === 'error'}
 									<p
-										class="absolute left-2 top-2 rounded-full bg-white/90 px-3 py-1 text-xs text-gray-700 shadow">
-										We could not load the bridges for this area.
-										<button
-											type="button"
-											class="link ml-1 text-secondary"
-											onclick={() => bridgeAttempt++}>
-											Try again
-										</button>
+										class="absolute left-2 right-14 top-2 max-w-sm rounded-lg bg-white/95 px-3 py-2 text-xs text-gray-700 shadow">
+										{#if bridgeTooLarge}
+											<strong>This area is too large for the server to load bridges for.</strong>
+											Choose a smaller area, such as an admin level 2 district.
+										{:else}
+											We could not load the bridges for this area.
+											<button
+												type="button"
+												class="link ml-1 text-secondary"
+												onclick={() => bridgeAttempt++}>
+												Try again
+											</button>
+										{/if}
 									</p>
 								{/if}
 								{#if mapMessage}
