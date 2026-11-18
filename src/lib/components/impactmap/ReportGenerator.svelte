@@ -107,8 +107,8 @@
 		if (!bridgeLayer) return '';
 		const n = bridgeLayer.data.features.length.toLocaleString();
 		if (bridgeLayer.mode === 'ranked') {
-			const how = reportState.bridgeWeight === 'population' ? 'population-weighted' : 'unweighted';
-			return `Top ${reportState.bridgeTop} bridges, ${how} (${n} shown)`;
+			const how = reportState.bridgeWeight === 'population' ? 'by population' : 'by hex count';
+			return `Top ${reportState.bridgeTop} bridges, ranked ${how} (${n} shown)`;
 		}
 		return `${n} bridges${bridgeLayer.data.truncated ? ' (more exist than are shown)' : ''}`;
 	});
@@ -375,7 +375,7 @@
 											class="join w-full"
 											role="group"
 											aria-label="What to weight the ranking by">
-											{#each [['none', 'None'], ['population', 'Population']] as [value, label] (value)}
+											{#each [['none', 'Hex count'], ['population', 'Population']] as [value, label] (value)}
 												<button
 													type="button"
 													class="btn join-item btn-sm flex-1 {reportState.bridgeWeight === value
