@@ -332,7 +332,14 @@
 										<BridgeSpectrum
 											selected={reportState.bridgeTop}
 											onselect={(top) => (reportState.bridgeTop = top)} />
-										{#if bridgeSummary}
+										{#if bridgeStatus === 'loading'}
+											<p
+												class="mt-2 flex items-center gap-2 text-xs font-semibold text-gray-700"
+												aria-live="polite">
+												<span class="loading loading-spinner loading-xs"></span>
+												Loading bridges…
+											</p>
+										{:else if bridgeSummary}
 											<p class="mt-2 text-xs font-semibold text-secondary" aria-live="polite">
 												{bridgeSummary}
 											</p>
@@ -386,8 +393,9 @@
 									bridgeMode={bridgeLayer?.mode} />
 								{#if bridgeStatus === 'loading'}
 									<p
-										class="absolute left-2 top-2 rounded-full bg-white/90 px-3 py-1 text-xs text-gray-700 shadow"
+										class="absolute left-2 top-2 flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-gray-700 shadow"
 										aria-live="polite">
+										<span class="loading loading-spinner loading-xs"></span>
 										Loading bridges…
 									</p>
 								{:else if bridgeStatus === 'error'}
